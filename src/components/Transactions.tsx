@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion } from 'motion/react';
-import { getInvoices, getPayments, getExpenses } from '../lib/firestore';
+import { getInvoices, getPayments, getExpenses, getQuotations } from '../lib/firestore';
 
 type TransactionType = 'all' | 'sale' | 'payment' | 'expense' | 'quotation';
 
@@ -38,6 +38,7 @@ export function Transactions({
   const [search, setSearch] = useState('');
   
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [quotations, setQuotations] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
 
@@ -48,8 +49,13 @@ export function Transactions({
   useEffect(() => {
     const fetchData = async () => {
       const promises: Promise<any>[] = [];
-      if (showSales) promises.push(getInvoices(ownerId));
-      else promises.push(Promise.resolve([]));
+      if (showSales) {
+        promises.push(getInvoices(ownerId));
+        promises.push(getQuotations(ownerId));
+      } else {
+        promises.push(Promise.resolve([]));
+        promises.push(Promise.resolve([]));
+      }
 
       if (showPayments) promises.push(getPayments(ownerId));
       else promises.push(Promise.resolve([]));
@@ -57,8 +63,9 @@ export function Transactions({
       if (showExpenses) promises.push(getExpenses(ownerId));
       else promises.push(Promise.resolve([]));
 
-      const [invs, pays, exps] = await Promise.all(promises);
+      const [invs, quots, pays, exps] = await Promise.all(promises);
       setInvoices(invs);
+      setQuotations(quots);
       setPayments(pays);
       setExpenses(exps);
     };
@@ -69,14 +76,27 @@ export function Transactions({
     ...(showSales ? invoices.map(inv => ({
       id: `inv-${inv.id}`,
       originalId: inv.id,
-      type: (inv.type === 'quotation' ? 'quotation' : 'sale') as 'quotation' | 'sale',
+      type: 'sale' as const,
       customerName: inv.customerName,
       amount: inv.total,
-      creditAmount: inv.type === 'quotation' ? 0 : inv.creditAmount,
+      creditAmount: inv.creditAmount,
       date: inv.date,
       reference: inv.invoiceNumber,
-      method: inv.type === 'quotation' ? 'Quote' : (inv.creditAmount > 0 ? 'Partial' : 'Paid'),
-      status: inv.type === 'quotation' ? 'Quote' : (inv.creditAmount > 0 ? 'Partial' : 'Paid'),
+      method: inv.creditAmount > 0 ? 'Partial' : 'Paid',
+      status: inv.creditAmount > 0 ? 'Partial' : 'Paid',
+      staffName: inv.staffName
+    })) : []),
+    ...(showSales ? quotations.map(inv => ({
+      id: `quot-${inv.id}`,
+      originalId: inv.id,
+      type: 'quotation' as const,
+      customerName: inv.customerName,
+      amount: inv.total,
+      creditAmount: 0,
+      date: inv.date,
+      reference: inv.invoiceNumber,
+      method: 'Quote',
+      status: 'Quote',
       staffName: inv.staffName
     })) : []),
     ...(showPayments ? payments.map(p => ({
@@ -108,7 +128,9 @@ export function Transactions({
   ].sort((a, b) => b.date - a.date);
 
   const filteredTransactions = allTransactions.filter(t => {
-    const matchesFilter = filter === 'all' || t.type === filter;
+    // Only show quotations if the filter is explicitly set to 'quotation'
+    // This keeps quotations out of the "all" transactions view as requested
+    const matchesFilter = filter === 'quotation' ? t.type === 'quotation' : (filter === 'all' ? t.type !== 'quotation' : t.type === filter);
     const matchesSearch = String(t.customerName || '').toLowerCase().includes(search.toLowerCase()) ||
                          String(t.reference || '').toLowerCase().includes(search.toLowerCase());
     return matchesFilter && matchesSearch;

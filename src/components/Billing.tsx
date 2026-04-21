@@ -128,7 +128,7 @@ export function Billing({
     }
 
     if (editId) {
-      getInvoice(editId).then(invoice => {
+      getInvoice(editId, isQuotation).then(invoice => {
         if (invoice) {
           setOriginalInvoice(invoice);
           setCustomerName(invoice.customerName);
@@ -380,11 +380,13 @@ export function Billing({
       }
 
       if (originalInvoice?.id) {
-        const invoiceDocRef = doc(db, 'invoices', originalInvoice.id.toString());
-        await updateDoc(invoiceDocRef, invoiceData);
+        const collName = isQuotation ? 'quotations' : 'invoices';
+        const docRef = doc(db, collName, originalInvoice.id.toString());
+        await updateDoc(docRef, invoiceData);
         alert(isQuotation ? 'Quotation updated successfully!' : 'Sale/Invoice updated successfully!');
       } else {
-        await addDoc(collection(db, 'invoices'), invoiceData);
+        const collName = isQuotation ? 'quotations' : 'invoices';
+        await addDoc(collection(db, collName), invoiceData);
       }
 
       if (isQuotation) {

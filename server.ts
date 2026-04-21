@@ -1,8 +1,8 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import cron from "node-cron";
 import twilio from "twilio";
 import path from "path";
+import { existsSync } from "fs";
 import { fileURLToPath } from "url";
 import admin from "firebase-admin";
 
@@ -15,10 +15,32 @@ function getDb() {
       if (admin.apps.length === 0) {
         const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT;
         if (serviceAccount) {
-          admin.initializeApp({
-            credential: admin.credential.cert(JSON.parse(serviceAccount)),
-          });
+          console.log("Initializing Firebase Admin with Service Account...");
+          try {
+            // Fix potential newline issues in private key if passed as a string
+            let cert;
+            if (serviceAccount.startsWith('{')) {
+              cert = JSON.parse(serviceAccount);
+            } else {
+              // Assume it's a base64 encoded JSON or something else? 
+              // Usually it's raw JSON in ENV.
+              cert = JSON.parse(serviceAccount);
+            }
+            
+            if (cert.private_key) {
+              cert.private_key = cert.private_key.replace(/\\n/g, '\n');
+            }
+
+            admin.initializeApp({
+              credential: admin.credential.cert(cert),
+            });
+            console.log("Firebase Admin initialized successfully.");
+          } catch (parseError) {
+            console.error("Failed to parse FIREBASE_SERVICE_ACCOUNT. Ensure it is a valid JSON string.");
+            throw parseError;
+          }
         } else {
+          console.log("Initializing Firebase Admin with Default Credentials...");
           admin.initializeApp({
             credential: admin.credential.applicationDefault(),
           });
@@ -26,7 +48,7 @@ function getDb() {
       }
       db = admin.firestore();
     } catch (error) {
-      console.warn("Firebase Admin failed to initialize. Some backend features like cron jobs may not work without proper credentials.");
+      console.warn("Firebase Admin failed to initialize.");
       console.error(error);
     }
   }
@@ -35,6 +57,9 @@ function getDb() {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+
+console.log("Starting server in mode:", process.env.NODE_ENV || "development");
+console.log("Vercel environment:", process.env.VERCEL === "1" ? "Yes" : "No");
 
 // --- Synchronous Route Definitions ---
 // API routes
@@ -101,31 +126,42 @@ if (process.env.VERCEL !== "1") {
   });
 }
 
-// --- Development/Production Middleware ---
-async function setupMiddlewares() {
+// --- Middleware Setup ---
+const distPath = path.join(__dirname, 'dist');
+
+if (process.env.NODE_ENV === "production" || process.env.VERCEL === "1") {
+  console.log("Serving production assets from:", distPath);
+  console.log("Dist directory exists:", existsSync(distPath));
+  if (existsSync(distPath)) {
+    console.log("Contents of dist:", (await import("fs")).readdirSync(distPath));
+  }
+  
+  // Serve static files in production
+  app.use(express.static(distPath));
+  
+  // SPA fallback - MUST be the last route
+  app.get('*', (req, res) => {
+    const indexPath = path.join(distPath, 'index.html');
+    res.sendFile(indexPath, (err) => {
+      if (err) {
+        console.error("Error sending index.html:", err);
+        res.status(500).send("Internal Server Error: Index file missing or inaccessible.");
+      }
+    });
+  });
+} else {
+  // Development mode with Vite hmr
+  const { createServer: createViteServer } = await import("vite");
+  const vite = await createViteServer({
+    server: { middlewareMode: true },
+    appType: "spa",
+  });
+  app.use(vite.middlewares);
+  
   const PORT = 3000;
-
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(__dirname, 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
-
-  if (process.env.NODE_ENV !== "production" || process.env.VERCEL !== "1") {
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running on http://localhost:${PORT}`);
-    });
-  }
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Development server running on http://localhost:${PORT}`);
+  });
 }
-
-setupMiddlewares();
 
 export default app;

@@ -905,6 +905,7 @@ export const deleteBusinessData = async (userId: string) => {
     'products',
     'b2b_products',
     'invoices',
+    'quotations',
     'payments',
     'expenses',
     'staff',
@@ -1008,11 +1009,27 @@ export const saveProfile = async (userId: string, profile: Profile) => {
 export const getInvoices = async (userId: string): Promise<Invoice[]> => {
   const path = 'invoices';
   try {
+    // We only fetch items that are NOT quotations for the main transactions list
+    const q = query(collection(db, path), where('userId', '==', userId));
+    const querySnapshot = await getDocs(q);
+    // Filter in memory for compatibility with older records without 'type' field
+    return querySnapshot.docs
+      .map(doc => ({ id: doc.id, ...doc.data() } as Invoice))
+      .filter(inv => inv.type !== 'quotation');
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+    return [];
+  }
+};
+
+export const getQuotations = async (userId: string): Promise<Invoice[]> => {
+  const path = 'quotations';
+  try {
     const q = query(collection(db, path), where('userId', '==', userId));
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
   } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, path);
+    // If collection doesn't exist yet, return empty list
     return [];
   }
 };
@@ -1040,10 +1057,11 @@ export const getPayments = async (userId: string): Promise<Payment[]> => {
   }
 };
 
-export const getInvoice = async (invoiceId: string): Promise<Invoice | null> => {
-  const path = `invoices/${invoiceId}`;
+export const getInvoice = async (invoiceId: string, isQuotation = false): Promise<Invoice | null> => {
+  const collName = isQuotation ? 'quotations' : 'invoices';
+  const path = `${collName}/${invoiceId}`;
   try {
-    const docRef = doc(db, 'invoices', invoiceId);
+    const docRef = doc(db, collName, invoiceId);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
       return { id: docSnap.id, ...docSnap.data() } as Invoice;
@@ -1055,11 +1073,12 @@ export const getInvoice = async (invoiceId: string): Promise<Invoice | null> => 
   }
 };
 
-export const updateInvoice = async (invoiceId: string, data: Partial<Invoice>) => {
-  const path = `invoices/${invoiceId}`;
+export const updateInvoice = async (invoiceId: string, data: Partial<Invoice>, isQuotation = false) => {
+  const collName = isQuotation ? 'quotations' : 'invoices';
+  const path = `${collName}/${invoiceId}`;
   const cleanData = sanitizeData(data);
   try {
-    const docRef = doc(db, 'invoices', invoiceId);
+    const docRef = doc(db, collName, invoiceId);
     await updateDoc(docRef, cleanData);
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
