@@ -127,7 +127,7 @@ if (process.env.VERCEL !== "1") {
 }
 
 // --- Middleware Setup ---
-const distPath = path.join(__dirname, 'dist');
+const distPath = path.join(__dirname, '..', 'dist');
 
 if (process.env.NODE_ENV === "production" || process.env.VERCEL === "1") {
   console.log("Serving production assets from:", distPath);
