@@ -174,7 +174,7 @@ export function Inventory({ user, ownerId, role }: { user: FirebaseUser; ownerId
       await batch.commit();
       
       // Refresh products
-      const q = query(collection(db, 'products'), where('userId', '==', user.uid));
+      const q = query(collection(db, 'products'), where('userId', '==', ownerId));
       const snapshot = await getDocs(q);
       setProducts(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Product)));
       
@@ -191,7 +191,7 @@ export function Inventory({ user, ownerId, role }: { user: FirebaseUser; ownerId
 
   useEffect(() => {
     const fetchData = async () => {
-      const q = query(collection(db, 'products'), where('userId', '==', user.uid));
+      const q = query(collection(db, 'products'), where('userId', '==', ownerId));
       const snapshot = await getDocs(q);
       setProducts(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Product)));
       

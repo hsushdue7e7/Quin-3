@@ -243,7 +243,7 @@ function AppContent() {
 
     try {
       // Fetch all products once for faster matching
-      const allProdsQ = query(collection(fdb, 'products'), where('userId', '==', user?.uid));
+      const allProdsQ = query(collection(fdb, 'products'), where('userId', '==', ownerId));
       const allProdsSnapshot = await getDocs(allProdsQ);
       const allProducts = allProdsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
 
@@ -371,7 +371,6 @@ function AppContent() {
     { id: 'inventory', name: 'Inventory', icon: Package, roles: ['admin', 'inventory_manager'] },
     { id: 'transactions', name: 'Transactions', icon: History, roles: ['admin', 'sales_manager', 'ca'] },
     { id: 'customers', name: 'Customers', icon: Users, roles: ['admin', 'sales_manager'] },
-    { id: 'reports', name: 'Reports', icon: BarChart3, roles: ['admin', 'ca'] },
     { id: 'profile', name: 'Me (Profile)', icon: User },
   ].filter(item => {
     if (!item.roles) return true;

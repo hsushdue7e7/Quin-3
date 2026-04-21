@@ -347,7 +347,7 @@ export function Billing({
         // 1. Revert old items stock if editing
         if (originalInvoice) {
           for (const item of originalInvoice.items) {
-            const productQuery = query(collection(db, 'products'), where('userId', '==', user.uid), where('id', '==', item.productId));
+            const productQuery = query(collection(db, 'products'), where('userId', '==', ownerId), where('id', '==', item.productId));
             const productSnapshot = await getDocs(productQuery);
             if (!productSnapshot.empty) {
               const productDoc = productSnapshot.docs[0];
@@ -364,7 +364,7 @@ export function Billing({
 
         // 2. Apply new items stock
         for (const item of items) {
-          const productQuery = query(collection(db, 'products'), where('userId', '==', user.uid), where('id', '==', item.productId));
+          const productQuery = query(collection(db, 'products'), where('userId', '==', ownerId), where('id', '==', item.productId));
           const productSnapshot = await getDocs(productQuery);
           if (!productSnapshot.empty) {
             const productDoc = productSnapshot.docs[0];
@@ -430,7 +430,7 @@ export function Billing({
   };
 
   const currentInvoice: Invoice = {
-    userId: user.uid,
+    userId: ownerId,
     customerName: isDirectSell ? 'Walk-in Customer' : customerName,
     customerMobile: isDirectSell ? '' : customerMobile,
     customerGstin: isGstInvoice ? customerGstin : '',
