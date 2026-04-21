@@ -1,0 +1,147 @@
+{
+  "entities": {
+    "UserSession": {
+      "title": "UserSession",
+      "description": "Tracks active sessions for a user to enforce device limits.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The ID of the user." },
+        "deviceId": { "type": "string", "description": "Unique identifier for the device." },
+        "lastActive": { "type": "string", "format": "date-time", "description": "Timestamp of last activity." }
+      },
+      "required": ["userId", "deviceId", "lastActive"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Product information.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "sku": { "type": "string" },
+        "costPrice": { "type": "number" },
+        "price": { "type": "number" },
+        "stock": { "type": "number" },
+        "primaryUnit": { "type": "string" },
+        "category": { "type": "string" },
+        "minStock": { "type": "number" },
+        "trackInventory": { "type": "boolean", "description": "Whether to track stock for this product." },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["userId", "name", "sku", "costPrice", "price", "stock", "primaryUnit", "category", "minStock", "updatedAt"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Invoice information.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "tax": { "type": "number" },
+        "taxPercentage": { "type": "number" },
+        "total": { "type": "number" },
+        "receivedAmount": { "type": "number" },
+        "creditAmount": { "type": "number" },
+        "date": { "type": "number" },
+        "invoiceNumber": { "type": "string" }
+      },
+      "required": ["userId", "customerName", "items", "subtotal", "tax", "taxPercentage", "total", "receivedAmount", "creditAmount", "date", "invoiceNumber"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Payment information.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "number" },
+        "method": { "type": "string", "enum": ["cash", "card", "upi", "other"] }
+      },
+      "required": ["userId", "customerName", "amount", "date", "method"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User information.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "mobile": { "type": "string" },
+        "username": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "sales_manager", "inventory_manager", "ca"] },
+        "ownerId": { "type": "string", "description": "The ID of the business owner this user belongs to." }
+      },
+      "required": ["name", "role"]
+    },
+    "Profile": {
+      "title": "Profile",
+      "description": "Business profile information.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "businessName": { "type": "string" },
+        "ownerName": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "taxPercentage": { "type": "number" },
+        "trackInventory": { "type": "boolean", "description": "Global setting for inventory tracking." },
+        "category": { "type": "string" },
+        "location": { "type": "string" },
+        "totalOrders": { "type": "number" },
+        "successRate": { "type": "number" },
+        "yearsOnPlatform": { "type": "number" },
+        "lastActive": { "type": "number" }
+      },
+      "required": ["userId", "businessName", "ownerName", "email", "phone", "address", "taxPercentage", "trackInventory"]
+    },
+    "Staff": {
+      "title": "Staff",
+      "description": "Staff member information.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The ID of the business owner." },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "role": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["userId", "name", "role", "status", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/userSessions/{sessionId}": {
+      "schema": { "$ref": "UserSession" },
+      "description": "Collection of active user sessions."
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "Product" },
+      "description": "Collection of products for internal inventory."
+    },
+    "/invoices/{invoiceId}": {
+      "schema": { "$ref": "Invoice" },
+      "description": "Collection of invoices."
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "Payment" },
+      "description": "Collection of payments."
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "User" },
+      "description": "Collection of users."
+    },
+    "/profiles/{profileId}": {
+      "schema": { "$ref": "Profile" },
+      "description": "Collection of profiles."
+    },
+    "/staff/{staffId}": {
+      "schema": { "$ref": "Staff" },
+      "description": "Collection of staff members."
+    }
+  }
+}

@@ -1,0 +1,223 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        (request.auth.token.email == "ry9506602867@gmail.com" && request.auth.token.get('email_verified', false) == true)
+      );
+    }
+
+    function getUserData() {
+      let path = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(path) ? get(path).data : {'role': 'guest', 'ownerId': ''};
+    }
+
+    function hasRole(role) {
+      let data = getUserData();
+      return isAuthenticated() && data.get('role', '') == role;
+    }
+
+    function isStaffOf(ownerId) {
+      let data = getUserData();
+      return isAuthenticated() && (data.get('ownerId', '') == ownerId || data.get('id', '') == ownerId);
+    }
+
+    function canAccess(ownerId) {
+      return isOwner(ownerId) || isStaffOf(ownerId) || isAdmin();
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isConnectedTo(sellerId) {
+      // Check both directions for a connected status
+      return (exists(/databases/$(database)/documents/connections/$(request.auth.uid + "_" + sellerId)) && 
+              get(/databases/$(database)/documents/connections/$(request.auth.uid + "_" + sellerId)).data.status == "connected") ||
+             (exists(/databases/$(database)/documents/connections/$(sellerId + "_" + request.auth.uid)) && 
+              get(/databases/$(database)/documents/connections/$(sellerId + "_" + request.auth.uid)).data.status == "connected");
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    match /test/{docId} {
+      allow read: if isAuthenticated();
+    }
+
+    match /userSessions/{sessionId} {
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+      allow update: if false;
+    }
+
+    // Domain Validators
+    function isValidOptionalString(data, field, minLen, maxLen) {
+      return !(field in data) ||
+             (data[field] is string &&
+              data[field].size() >= minLen &&
+              data[field].size() <= maxLen);
+    }
+
+    function isValidOptionalNumber(data, field) {
+      return !(field in data) || data[field] is number;
+    }
+
+    function isValidProduct(data) {
+      return hasRequiredFields(['userId', 'name', 'sku', 'costPrice', 'price', 'stock', 'primaryUnit', 'category', 'minStock', 'trackInventory', 'updatedAt']) &&
+             data.userId is string &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
+             data.sku is string &&
+             data.costPrice is number &&
+             data.price is number && data.price >= 0 &&
+             data.stock is number &&
+             data.primaryUnit is string &&
+             data.category is string &&
+             data.minStock is number &&
+             data.trackInventory is bool &&
+             data.updatedAt is number &&
+             isValidOptionalString(data, 'hsnCode', 0, 20) &&
+             isValidOptionalNumber(data, 'gstRate') &&
+             isValidOptionalString(data, 'secondaryUnit', 0, 20) &&
+             isValidOptionalNumber(data, 'conversionRate') &&
+             isValidOptionalString(data, 'description', 0, 1000) &&
+             (!('imageUrls' in data) || (data.imageUrls is list && data.imageUrls.size() < 10));
+    }
+
+    match /products/{productId} {
+      allow get: if isAuthenticated() && canAccess(resource.data.userId);
+      allow list: if isAuthenticated();
+      allow create: if isAuthenticated() && (isOwner(request.resource.data.userId) || (isStaffOf(request.resource.data.userId) && hasRole('inventory_manager'))) && isValidProduct(request.resource.data);
+      allow update: if isAuthenticated() && (isOwner(resource.data.userId) || (isStaffOf(resource.data.userId) && hasRole('inventory_manager'))) && 
+                    request.resource.data.userId == resource.data.userId &&
+                    isValidProduct(request.resource.data);
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
+    match /invoices/{invoiceId} {
+      allow get: if isAuthenticated() && (canAccess(resource.data.userId) || hasRole('ca'));
+      allow list: if isAuthenticated() && (canAccess(resource.data.userId) || hasRole('ca') || isAdmin());
+      allow create: if isAuthenticated() && (isOwner(request.resource.data.userId) || (isStaffOf(request.resource.data.userId) && hasRole('sales_manager'))) && hasRequiredFields(['userId', 'customerName', 'items', 'subtotal', 'tax', 'taxPercentage', 'total', 'receivedAmount', 'creditAmount', 'date', 'invoiceNumber']);
+      allow update: if isAuthenticated() && (isOwner(resource.data.userId) || (isStaffOf(resource.data.userId) && hasRole('sales_manager'))) && request.resource.data.userId == resource.data.userId;
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
+    match /payments/{paymentId} {
+      allow get: if isAuthenticated() && (canAccess(resource.data.userId) || hasRole('ca'));
+      allow list: if isAuthenticated() && (canAccess(resource.data.userId) || hasRole('ca') || isAdmin());
+      allow create: if isAuthenticated() && (isOwner(request.resource.data.userId) || (isStaffOf(request.resource.data.userId) && (hasRole('ca') || hasRole('sales_manager'))));
+      allow update: if isAuthenticated() && (isOwner(resource.data.userId) || (isStaffOf(resource.data.userId) && (hasRole('ca') || hasRole('sales_manager'))));
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
+    match /staff/{staffId} {
+      allow get: if isAuthenticated() && (isOwner(resource.data.userId) || resource.data.email == request.auth.token.email || resource.data.email == request.auth.token.get('email', ''));
+      allow list: if isAuthenticated();
+      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+      allow update: if isAuthenticated() && isOwner(resource.data.userId);
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
+    match /users/{userId} {
+      allow read, write: if isAuthenticated();
+      allow list: if isAuthenticated();
+      allow create: if isAuthenticated() && isOwner(userId) && hasOnlyAllowedFields(['id', 'name', 'email', 'displayName', 'mobile', 'username', 'role', 'ownerId', 'createdAt', 'updatedAt']) && request.resource.data.role == 'admin';
+      allow update: if isAuthenticated() && (isOwner(userId) || isAdmin()) && request.resource.data.role == resource.data.role;
+      allow delete: if isAdmin();
+    }
+
+    match /profiles/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isOwner(userId) && hasRequiredFields(['userId', 'businessName', 'ownerName', 'email', 'phone', 'address', 'taxPercentage', 'trackInventory']);
+      allow update: if isAuthenticated() && isOwner(userId);
+      allow delete: if isAdmin();
+    }
+
+    match /expenses/{expenseId} {
+      allow get: if isAuthenticated() && (canAccess(resource.data.userId) || hasRole('ca'));
+      allow list: if isAuthenticated() && (canAccess(resource.data.userId) || hasRole('ca') || isAdmin());
+      allow create: if isAuthenticated() && (isOwner(request.resource.data.userId) || (isStaffOf(request.resource.data.userId) && (hasRole('ca') || hasRole('sales_manager'))));
+      allow update: if isAuthenticated() && (isOwner(resource.data.userId) || (isStaffOf(resource.data.userId) && (hasRole('ca') || hasRole('sales_manager'))));
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
+    match /business_profiles/{userId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isOwner(userId);
+      allow delete: if isAdmin();
+    }
+
+    match /connections/{connectionId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.fromUserId || 
+        request.auth.uid == resource.data.toUserId
+      );
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.fromUserId;
+      allow update: if isAuthenticated() && (
+        request.auth.uid == resource.data.fromUserId || 
+        request.auth.uid == resource.data.toUserId
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /b2b_products/{productId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+      allow update: if isAuthenticated() && isOwner(resource.data.userId);
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
+    match /b2b_orders/{orderId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.buyerId || 
+        request.auth.uid == resource.data.sellerId
+      );
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.buyerId;
+      allow update: if isAuthenticated() && (
+        request.auth.uid == resource.data.buyerId || 
+        request.auth.uid == resource.data.sellerId
+      );
+    }
+
+    match /inquiries/{inquiryId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.buyerId || 
+        request.auth.uid == resource.data.sellerId
+      );
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.buyerId;
+      allow update: if isAuthenticated() && (
+        request.auth.uid == resource.data.buyerId || 
+        request.auth.uid == resource.data.sellerId
+      );
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.buyerId;
+    }
+
+    match /popular_searches/{searchId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+    }
+  }
+}
