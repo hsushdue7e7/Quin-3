@@ -219,8 +219,12 @@ export function Dashboard({
           link.click();
         }
       } catch (error) {
-        console.error('Error sharing image:', error);
-        alert('Failed to generate image for sharing.');
+        if ((error as any).name !== 'AbortError') {
+          console.error('Error sharing image:', error);
+          alert('Failed to share image. Your browser might not support sharing files.');
+        } else {
+          console.log('Share was canceled by user');
+        }
       } finally {
         setIsSharingImage(null);
       }

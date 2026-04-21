@@ -199,7 +199,7 @@ export function Customers({
         const dataUrl = canvas.toDataURL('image/png');
         const blob = await (await fetch(dataUrl)).blob();
         const file = new File([blob], `invoice-${inv.invoiceNumber}.png`, { type: 'image/png' });
-
+        
         // Try to share the image if supported
         if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({
@@ -215,8 +215,12 @@ export function Customers({
           link.click();
         }
       } catch (error) {
-        console.error('Error sharing image:', error);
-        alert('Failed to generate image for sharing.');
+        if ((error as any).name !== 'AbortError') {
+          console.error('Error sharing image:', error);
+          alert('Failed to share image. Your browser might not support sharing files.');
+        } else {
+          console.log('Share was canceled by user');
+        }
       } finally {
         setIsSharingImage(null);
       }
