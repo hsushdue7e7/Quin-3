@@ -176,7 +176,7 @@ export function Dashboard({
       receivedAmount: inv.total 
     });
     // Refresh data
-    const invs = await getInvoices(user.uid);
+    const invs = await getInvoices(ownerId);
     setInvoices(invs);
   };
 
@@ -468,6 +468,7 @@ export function Dashboard({
                   <h3 className="font-bold text-slate-900">{inv.customerName}</h3>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
                     {inv.invoiceNumber} • {format(inv.date, 'dd MMM')}
+                    {inv.staffName && ` • by ${inv.staffName}`}
                   </p>
                 </div>
                 <div className="text-right">

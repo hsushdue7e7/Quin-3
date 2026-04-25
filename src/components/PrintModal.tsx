@@ -98,8 +98,11 @@ export function PrintModal({
       setPrintSuccess(true);
       setPrinterStatus({type: 'bt', name: 'Bluetooth Printer'});
       setTimeout(() => setPrintSuccess(false), 3000);
-    } catch (error) {
+    } catch (error: any) {
       console.error('BT Print error:', error);
+      if (error && error.message && error.message.includes('User cancelled')) {
+        return;
+      }
       alert('Bluetooth printing failed. Make sure your printer is on and in pairing mode.');
     } finally {
       setIsPrinting(false);
@@ -113,8 +116,11 @@ export function PrintModal({
       setPrintSuccess(true);
       setPrinterStatus({type: 'usb', name: 'USB Printer'});
       setTimeout(() => setPrintSuccess(false), 3000);
-    } catch (error) {
+    } catch (error: any) {
       console.error('USB Print error:', error);
+      if (error && error.message && error.message.includes('User cancelled')) {
+        return;
+      }
       alert('USB printing failed. Make sure your printer is connected via USB.');
     } finally {
       setIsPrinting(false);
@@ -127,7 +133,10 @@ export function PrintModal({
       await ThermalPrinterService.testPrint(type);
       setPrintSuccess(true);
       setTimeout(() => setPrintSuccess(false), 3000);
-    } catch (error) {
+    } catch (error: any) {
+      if (error && error.message && error.message.includes('User cancelled')) {
+        return;
+      }
       alert('Test print failed. Check connection.');
     } finally {
       setIsPrinting(false);

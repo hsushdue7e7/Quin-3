@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { 
   User, Building, Mail, Phone, MapPin, Save, Camera, CheckCircle2, LogOut, 
@@ -307,7 +307,14 @@ export function Profile({ user, ownerId, role, onLogout }: {
             )}
             {activeView === 'profile' && !isEditing && isAdmin && (
               <button
-                onClick={() => setShowPasswordPrompt(true)}
+                onClick={() => {
+                  const isGoogleUser = user?.providerData.some(p => p.providerId === 'google.com');
+                  if (isGoogleUser) {
+                    setIsEditing(true);
+                  } else {
+                    setShowPasswordPrompt(true);
+                  }
+                }}
                 className="px-4 py-2 rounded-lg text-sm font-bold text-slate-900 hover:bg-slate-50 transition-all flex items-center gap-2"
               >
                 <Edit3 size={18} />
@@ -440,7 +447,14 @@ export function Profile({ user, ownerId, role, onLogout }: {
 
               {!isEditing && (
                 <button
-                  onClick={() => setShowPasswordPrompt(true)}
+                  onClick={() => {
+                    const isGoogleUser = user?.providerData.some(p => p.providerId === 'google.com');
+                    if (isGoogleUser) {
+                      setIsEditing(true);
+                    } else {
+                      setShowPasswordPrompt(true);
+                    }
+                  }}
                   className="px-6 py-3 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white rounded-2xl font-bold transition-all border border-white/10 flex items-center gap-2 shadow-lg group active:scale-95"
                 >
                   <Edit3 size={18} className="group-hover:rotate-12 transition-transform" />
@@ -487,7 +501,14 @@ export function Profile({ user, ownerId, role, onLogout }: {
                   </div>
                   {!isEditing && (
                     <button 
-                      onClick={() => setShowPasswordPrompt(true)}
+                      onClick={() => {
+                        const isGoogleUser = user?.providerData.some(p => p.providerId === 'google.com');
+                        if (isGoogleUser) {
+                          setIsEditing(true);
+                        } else {
+                          setShowPasswordPrompt(true);
+                        }
+                      }}
                       className="text-sm font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
                     >
                       Edit Details

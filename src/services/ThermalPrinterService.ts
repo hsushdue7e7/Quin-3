@@ -39,8 +39,12 @@ export class ThermalPrinterService {
 
       this.bluetoothCharacteristic = characteristic;
       return characteristic;
-    } catch (error) {
-      console.error('Bluetooth connection failed:', error);
+    } catch (error: any) {
+      if (error && error.message && error.message.includes('User cancelled')) {
+        console.log('Bluetooth connection cancelled by user');
+      } else {
+        console.error('Bluetooth connection failed:', error);
+      }
       throw error;
     }
   }
@@ -64,8 +68,12 @@ export class ThermalPrinterService {
 
       this.usbDevice = device;
       return device;
-    } catch (error) {
-      console.error('USB connection failed:', error);
+    } catch (error: any) {
+      if (error && error.message && error.message.includes('User cancelled')) {
+        console.log('USB connection cancelled by user');
+      } else {
+        console.error('USB connection failed:', error);
+      }
       throw error;
     }
   }

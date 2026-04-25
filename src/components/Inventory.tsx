@@ -37,7 +37,7 @@ export function Inventory({ user, ownerId, role }: { user: FirebaseUser; ownerId
   const [isUploading, setIsUploading] = useState(false);
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
+    const files = Array.from(e.target.files || []) as File[];
     if (files.length === 0) return;
 
     const MAX_SIZE = 5 * 1024 * 1024; // 5MB
@@ -419,6 +419,32 @@ export function Inventory({ user, ownerId, role }: { user: FirebaseUser; ownerId
 
   const isGlobalInventoryEnabled = profile?.trackInventory !== false;
 
+  const triggerAction = (action: { type: 'add' | 'edit' | 'delete' | 'bulk_update', product?: Product }) => {
+    setPendingAction(action);
+    const isGoogleUser = user?.providerData.some(p => p.providerId === 'google.com');
+    if (isGoogleUser) {
+      if (action.type === 'add') {
+        setEditingProduct(null);
+        setSkuValue('');
+        setImageFiles([]);
+        setImagePreviews([]);
+        setIsModalOpen(true);
+      } else if (action.type === 'edit' && action.product) {
+        setEditingProduct(action.product);
+        setSkuValue(action.product.sku);
+        setImageFiles([]);
+        setImagePreviews([]);
+        setIsModalOpen(true);
+      } else if (action.type === 'delete' && action.product?.id) {
+        deleteProduct(action.product.id);
+      } else if (action.type === 'bulk_update') {
+        setIsBulkModalOpen(true);
+      }
+    } else {
+      setShowPasswordPrompt(true);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PasswordPrompt
@@ -437,10 +463,7 @@ export function Inventory({ user, ownerId, role }: { user: FirebaseUser; ownerId
         <div className="flex gap-3">
           {selectedIds.length > 0 && (
             <button
-              onClick={() => {
-                setPendingAction({ type: 'bulk_update' });
-                setShowPasswordPrompt(true);
-              }}
+              onClick={() => triggerAction({ type: 'bulk_update' })}
               className="bg-amber-50 text-amber-700 border border-amber-200 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-amber-100 transition-colors"
             >
               <Package size={18} />
@@ -448,10 +471,7 @@ export function Inventory({ user, ownerId, role }: { user: FirebaseUser; ownerId
             </button>
           )}
           <button
-            onClick={() => {
-              setPendingAction({ type: 'add' });
-              setShowPasswordPrompt(true);
-            }}
+            onClick={() => triggerAction({ type: 'add' })}
             className="bg-slate-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-slate-800 transition-colors"
           >
             <Plus size={18} />
@@ -627,10 +647,7 @@ export function Inventory({ user, ownerId, role }: { user: FirebaseUser; ownerId
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2 md:opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
-                          onClick={() => {
-                            setPendingAction({ type: 'edit', product });
-                            setShowPasswordPrompt(true);
-                          }}
+                          onClick={() => triggerAction({ type: 'edit', product })}
                           className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded"
                         >
                           <Edit2 size={16} />
@@ -638,8 +655,7 @@ export function Inventory({ user, ownerId, role }: { user: FirebaseUser; ownerId
                         <button
                           onClick={() => {
                             if (confirm('Are you sure you want to delete this product?')) {
-                              setPendingAction({ type: 'delete', product });
-                              setShowPasswordPrompt(true);
+                              triggerAction({ type: 'delete', product });
                             }
                           }}
                           className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Upload, FileJson, FileText, Database, AlertCircle, CheckCircle2, 
   Loader2, ArrowRight, Download, History, ShieldCheck, Info,

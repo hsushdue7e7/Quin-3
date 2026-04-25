@@ -304,8 +304,8 @@ export function Customers({
 
     // Refresh data
     const [invs, pays] = await Promise.all([
-      getInvoices(user.uid),
-      getPayments(user.uid)
+      getInvoices(ownerId),
+      getPayments(ownerId)
     ]);
     setInvoices(invs);
     setPayments(pays);

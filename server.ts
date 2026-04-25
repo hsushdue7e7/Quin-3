@@ -32,6 +32,10 @@ const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // API Routes
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.url}`);
+  next();
+});
 app.get("/api/health", (req, res) => res.json({ status: "ok", env: process.env.NODE_ENV }));
 
 app.get("/api/cron/reminders", async (req, res) => {

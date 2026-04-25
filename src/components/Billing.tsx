@@ -100,7 +100,7 @@ export function Billing({
   const customerSuggestions = Array.from(new Set(allInvoices?.map(inv => JSON.stringify({
     name: inv.customerName,
     mobile: inv.customerMobile || ''
-  }))) || []).map(s => JSON.parse(s))
+  }))) || []).map(s => JSON.parse(s as string))
     .filter(c => 
       String(c.name || '').toLowerCase().includes(customerName.toLowerCase()) && 
       customerName.length > 0 &&
@@ -320,7 +320,7 @@ export function Billing({
       customerGstin: isGstInvoice ? customerGstin : '',
       isGstInvoice,
       stateOfSupply,
-      type: isQuotation ? 'quotation' : undefined,
+      ...(isQuotation ? { type: 'quotation' as const } : { type: 'invoice' as const }),
       items: itemsWithGst,
       subtotal,
       tax,
@@ -438,7 +438,7 @@ export function Billing({
     customerGstin: isGstInvoice ? customerGstin : '',
     isGstInvoice,
     stateOfSupply,
-    type: isQuotation ? 'quotation' : undefined,
+    ...(isQuotation ? { type: 'quotation' as const } : { type: 'invoice' as const }),
     items: itemsWithGst,
     subtotal,
     tax,

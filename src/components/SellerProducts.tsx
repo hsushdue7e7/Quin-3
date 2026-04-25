@@ -93,7 +93,7 @@ export default function SellerProducts({ products, onProductsChange }: SellerPro
   };
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
+    const files = Array.from(e.target.files || []) as File[];
     if (files.length === 0 || !auth.currentUser) return;
 
     const MAX_SIZE = 5 * 1024 * 1024; // 5MB

@@ -1787,7 +1787,7 @@ export default function B2BNetwork({ ownerId, onGenerateInvoice }: B2BNetworkPro
                 </div>
                 <div className="text-right">
                   <p className="text-sm text-gray-500">Cart Items</p>
-                  <p className="font-bold text-indigo-600">{Object.values(cart).reduce((a, b) => a + b, 0)} items</p>
+                  <p className="font-bold text-indigo-600">{Object.values(cart).reduce((a: number, b: number) => a + b, 0)} items</p>
                 </div>
               </div>
 

@@ -1,8 +1,12 @@
 const getRawClientId = () => {
-  const id = import.meta.env.VITE_GOOGLE_CLIENT_ID || (process.env as any).VITE_GOOGLE_CLIENT_ID;
-  if (!id) return '';
-  // Remove quotes if they exist (common mistake in env vars)
-  return id.toString().trim().replace(/^["']|["']$/g, '');
+  try {
+    const id = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID || (typeof process !== 'undefined' ? (process.env as any).VITE_GOOGLE_CLIENT_ID : undefined);
+    if (!id) return '';
+    // Remove quotes if they exist (common mistake in env vars)
+    return id.toString().trim().replace(/^["']|["']$/g, '');
+  } catch (e) {
+    return '';
+  }
 };
 
 const CLIENT_ID = getRawClientId();
