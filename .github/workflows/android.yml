@@ -15,10 +15,8 @@ jobs:
           node-version: 20
 
       - run: npm install
+      - run: npm install @capacitor/core @capacitor/cli @capacitor/android --save
       - run: npm run build
-
-      - run: npm install @capacitor/core @capacitor/cli @capacitor/android
-      - run: npx cap add android
       - run: npx cap sync android
 
       - uses: actions/setup-java@v4
