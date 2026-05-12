@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { 
-  User, Building, Mail, Phone, MapPin, Save, Camera, CheckCircle2, LogOut, 
+  Menu, X, User, Building, Mail, Phone, MapPin, Save, Camera, CheckCircle2, LogOut, 
   BarChart3, Database, AlertCircle, FileText, 
   Briefcase, Settings, Trash2, ExternalLink, Globe, CreditCard, 
   TrendingUp, TrendingDown, Package, BadgeCheck, Edit3, ChevronRight, Plus,
@@ -11,7 +11,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Reports } from './Reports';
 import BusinessProfileForm from './BusinessProfileForm';
 import BusinessProfileView from './BusinessProfileView';
-import { PasswordPrompt } from './PasswordPrompt';
 import { ConfirmationModal } from './ConfirmationModal';
 import { useSync } from '../lib/sync';
 import { DataImport } from './DataImport';
@@ -37,8 +36,8 @@ export function Profile({ user, ownerId, role, onLogout }: {
   const [showSuccess, setShowSuccess] = useState(false);
   const [activeView, setActiveView] = useState<'profile' | 'reports' | 'inventory' | 'staff' | 'import'>(isAdmin || role === 'ca' ? 'reports' : 'profile');
   const [error, setError] = useState<string | null>(null);
-  const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
   const [showThemePicker, setShowThemePicker] = useState(false);
+  const [isNavOpen, setIsNavOpen] = useState(false);
 
   useEffect(() => {
     setActiveView('profile');
@@ -236,85 +235,97 @@ export function Profile({ user, ownerId, role, onLogout }: {
               : 'Configure inventory tracking.'}
           </p>
         </div>
-        <div className="flex gap-3">
-          <div className="flex items-center bg-white p-1 rounded-xl border border-slate-200 shadow-sm overflow-x-auto whitespace-nowrap">
-            {isAdmin && (
-              <button
-                onClick={() => setActiveView('profile')}
-                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
-                  activeView === 'profile' 
-                    ? 'bg-slate-900 text-white shadow-md' 
-                    : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-              >
-                <User size={18} />
-                Business
-              </button>
-            )}
-            {!isAdmin && (
-              <button
-                onClick={() => setActiveView('profile')}
-                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
-                  activeView === 'profile' 
-                    ? 'bg-slate-900 text-white shadow-md' 
-                    : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-              >
-                <User size={18} />
-                My Profile
-              </button>
-            )}
-            {(isAdmin || role === 'ca') && (
-              <>
-                <button
-                  onClick={() => setActiveView('reports')}
-                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
-                    activeView === 'reports' 
-                      ? 'bg-slate-900 text-white shadow-md' 
-                      : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
-                  }`}
+        <div className="flex gap-3 relative">
+          <div className="relative z-50">
+            <button
+              onClick={() => setIsNavOpen(!isNavOpen)}
+              className="p-3 bg-white border border-slate-200 rounded-xl shadow-sm hover:bg-slate-50 transition-colors text-slate-700 flex items-center justify-center"
+            >
+              {isNavOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
+
+            <AnimatePresence>
+              {isNavOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden flex flex-col"
                 >
-                  <BarChart3 size={18} />
-                  Reports
-                </button>
-              </>
-            )}
-            {isAdmin && (
-              <>
-                <button
-                  onClick={() => setActiveView('staff')}
-                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
-                    activeView === 'staff' 
-                      ? 'bg-slate-900 text-white shadow-md' 
-                      : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
-                  }`}
-                >
-                  <Users size={18} />
-                  Staff
-                </button>
-                <button
-                  onClick={() => setActiveView('import')}
-                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
-                    activeView === 'import' 
-                      ? 'bg-slate-900 text-white shadow-md' 
-                      : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
-                  }`}
-                >
-                  <Upload size={18} />
-                  Import
-                </button>
-              </>
-            )}
+                  {isAdmin && (
+                    <button
+                      onClick={() => { setActiveView('profile'); setIsNavOpen(false); }}
+                      className={`px-4 py-3 text-sm font-bold transition-all flex items-center gap-3 ${
+                        activeView === 'profile' 
+                          ? 'bg-slate-50 text-indigo-600' 
+                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                      }`}
+                    >
+                      <User size={18} />
+                      Business
+                    </button>
+                  )}
+                  {!isAdmin && (
+                    <button
+                      onClick={() => { setActiveView('profile'); setIsNavOpen(false); }}
+                      className={`px-4 py-3 text-sm font-bold transition-all flex items-center gap-3 ${
+                        activeView === 'profile' 
+                          ? 'bg-slate-50 text-indigo-600' 
+                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                      }`}
+                    >
+                      <User size={18} />
+                      My Profile
+                    </button>
+                  )}
+                  {(isAdmin || role === 'ca') && (
+                    <button
+                      onClick={() => { setActiveView('reports'); setIsNavOpen(false); }}
+                      className={`px-4 py-3 text-sm font-bold transition-all flex items-center gap-3 border-t border-slate-100 ${
+                        activeView === 'reports' 
+                          ? 'bg-slate-50 text-indigo-600' 
+                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                      }`}
+                    >
+                      <BarChart3 size={18} />
+                      Reports
+                    </button>
+                  )}
+                  {isAdmin && (
+                    <>
+                      <button
+                        onClick={() => { setActiveView('staff'); setIsNavOpen(false); }}
+                        className={`px-4 py-3 text-sm font-bold transition-all flex items-center gap-3 border-t border-slate-100 ${
+                          activeView === 'staff' 
+                            ? 'bg-slate-50 text-indigo-600' 
+                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                        }`}
+                      >
+                        <Users size={18} />
+                        Staff
+                      </button>
+                      <button
+                        onClick={() => { setActiveView('import'); setIsNavOpen(false); }}
+                        className={`px-4 py-3 text-sm font-bold transition-all flex items-center gap-3 border-t border-slate-100 ${
+                          activeView === 'import' 
+                            ? 'bg-slate-50 text-indigo-600' 
+                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                        }`}
+                      >
+                        <Upload size={18} />
+                        Import
+                      </button>
+                    </>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+          <div className="flex items-center">
             {activeView === 'profile' && !isEditing && isAdmin && (
               <button
-                onClick={() => {
-                  const isGoogleUser = user?.providerData.some(p => p.providerId === 'google.com');
-                  if (isGoogleUser) {
-                    setIsEditing(true);
-                  } else {
-                    setShowPasswordPrompt(true);
-                  }
-                }}
+                onClick={() => setIsEditing(true)}
                 className="px-4 py-2 rounded-lg text-sm font-bold text-slate-900 hover:bg-slate-50 transition-all flex items-center gap-2"
               >
                 <Edit3 size={18} />
@@ -329,21 +340,8 @@ export function Profile({ user, ownerId, role, onLogout }: {
               Log Out
             </button>
           </div>
-          {activeView === 'profile' && !isEditing && (
-            <div className="flex gap-3">
-            </div>
-          )}
         </div>
       </div>
-
-      <PasswordPrompt
-        isOpen={showPasswordPrompt}
-        onClose={() => setShowPasswordPrompt(false)}
-        onSuccess={() => setIsEditing(true)}
-        title="Security Verification"
-        description="Please enter your password to edit the business profile."
-        userId={ownerId}
-      />
 
       {activeView === 'import' && isAdmin && (
         <DataImport 
@@ -370,76 +368,61 @@ export function Profile({ user, ownerId, role, onLogout }: {
           )}
 
           {/* SECTION 1: Business Header */}
-          <div className="relative overflow-hidden bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 rounded-[2.5rem] p-8 text-white shadow-2xl border border-white/10">
-            <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/20 blur-[120px] -mr-48 -mt-48 animate-pulse" />
-            <div className="absolute bottom-0 left-0 w-96 h-96 bg-emerald-500/10 blur-[120px] -ml-48 -mb-48" />
-            
-            <div className="relative flex flex-col md:flex-row gap-10 items-center md:items-start">
-              <div className="relative group">
-                <div className="w-36 h-36 bg-white/10 backdrop-blur-xl rounded-[2rem] flex items-center justify-center overflow-hidden border border-white/20 shadow-2xl transition-transform group-hover:scale-105 duration-500">
+          <div className="relative overflow-hidden bg-white rounded-[2.5rem] p-8 md:p-10 shadow-lg border border-slate-200">
+            <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-50 blur-[100px] rounded-full -mr-48 -mt-48 pointer-events-none" />
+            <div className="relative flex flex-col md:flex-row gap-8 items-center md:items-start">
+              <div className="relative group shrink-0">
+                <div className="w-32 h-32 md:w-40 md:h-40 bg-slate-50 rounded-full flex items-center justify-center overflow-hidden border-4 border-white shadow-xl transition-transform group-hover:scale-105 duration-500">
                   {profile?.logo ? (
                     <img src={profile.logo} alt="Logo" className="w-full h-full object-cover" />
                   ) : (
                     <div className="flex flex-col items-center gap-2">
-                      <Building size={48} className="text-white/20" />
-                      <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">No Logo</span>
+                      <Building size={40} className="text-slate-300" />
                     </div>
                   )}
                 </div>
                 {isEditing && (
-                  <label className="absolute -bottom-3 -right-3 bg-white text-indigo-600 p-3 rounded-2xl cursor-pointer hover:bg-indigo-50 shadow-2xl transition-all hover:scale-110 active:scale-95 border border-indigo-100">
-                    <Camera size={20} />
+                  <label className="absolute bottom-2 right-2 bg-indigo-600 text-white p-3 rounded-full cursor-pointer hover:bg-indigo-700 shadow-xl transition-all hover:scale-110 active:scale-95 border-2 border-white ring-4 ring-white">
+                    <Camera size={18} />
                     <input type="file" className="hidden" accept="image/*" onChange={handleLogoChange} />
                   </label>
                 )}
               </div>
 
-              <div className="flex-1 text-center md:text-left space-y-6">
-                <div className="space-y-2">
+              <div className="flex-1 text-center md:text-left space-y-4 w-full">
+                <div className="space-y-1">
                   <div className="flex items-center justify-center md:justify-start gap-3">
-                    <h2 className="text-4xl font-black tracking-tight drop-shadow-sm">{profile?.businessName || 'Your Business'}</h2>
+                    <h2 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight">{profile?.businessName || 'Your Business'}</h2>
                     {profile?.gstin && (
-                      <div className="flex items-center gap-1 bg-blue-500/20 backdrop-blur-md px-2 py-1 rounded-lg border border-blue-400/30">
-                        <BadgeCheck className="text-blue-400 w-4 h-4" />
-                        <span className="text-[10px] font-bold text-blue-300 uppercase tracking-wider">Verified</span>
+                      <div className="flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100 shrink-0">
+                        <BadgeCheck className="text-emerald-600 w-4 h-4" />
+                        <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider hidden sm:inline">Verified GST</span>
                       </div>
                     )}
                   </div>
-                  <p className="text-indigo-200/70 font-semibold flex items-center justify-center md:justify-start gap-2 text-lg">
-                    <User size={18} className="text-indigo-400" />
+                  <p className="text-slate-500 font-medium flex items-center justify-center md:justify-start gap-2 text-lg">
+                    <User size={18} className="text-slate-400" />
                     {profile?.ownerName || 'Owner Name'}
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-8 pt-4 border-t border-white/10">
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-bold text-indigo-300/50 uppercase tracking-[0.2em]">Monthly Revenue</p>
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl font-black">{formatCurrency(stats.currentRevenue)}</span>
-                      <div className={cn(
-                        "flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold backdrop-blur-md border",
-                        stats.revenueGrowth >= 0 
-                          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
-                          : "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                      )}>
-                        {stats.revenueGrowth >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                        {Math.abs(stats.revenueGrowth).toFixed(1)}%
-                      </div>
+                <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 pt-4 border-t border-slate-100">
+                  <div className="flex items-center gap-3 bg-slate-50 px-4 py-3 rounded-2xl border border-slate-100 shrink-0">
+                    <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                      <TrendingUp size={18} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Revenue</p>
+                      <p className="font-black text-slate-900">{formatCurrency(stats.currentRevenue)}</p>
                     </div>
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-bold text-indigo-300/50 uppercase tracking-[0.2em]">Monthly Profit</p>
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl font-black">{formatCurrency(stats.currentProfit)}</span>
-                      <div className={cn(
-                        "flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold backdrop-blur-md border",
-                        stats.profitGrowth >= 0 
-                          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
-                          : "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                      )}>
-                        {stats.profitGrowth >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                        {Math.abs(stats.profitGrowth).toFixed(1)}%
-                      </div>
+                  <div className="flex items-center gap-3 bg-slate-50 px-4 py-3 rounded-2xl border border-slate-100 shrink-0">
+                    <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                      <DollarSign size={18} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Profit</p>
+                      <p className="font-black text-slate-900">{formatCurrency(stats.currentProfit)}</p>
                     </div>
                   </div>
                 </div>
@@ -447,109 +430,99 @@ export function Profile({ user, ownerId, role, onLogout }: {
 
               {!isEditing && (
                 <button
-                  onClick={() => {
-                    const isGoogleUser = user?.providerData.some(p => p.providerId === 'google.com');
-                    if (isGoogleUser) {
-                      setIsEditing(true);
-                    } else {
-                      setShowPasswordPrompt(true);
-                    }
-                  }}
-                  className="px-6 py-3 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white rounded-2xl font-bold transition-all border border-white/10 flex items-center gap-2 shadow-lg group active:scale-95"
+                  onClick={() => setIsEditing(true)}
+                  className="px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-bold transition-all flex items-center gap-2 shadow-lg shrink-0 mt-4 md:mt-0"
                 >
-                  <Edit3 size={18} className="group-hover:rotate-12 transition-transform" />
+                  <Edit3 size={18} />
                   Edit Profile
                 </button>
               )}
             </div>
           </div>
 
-          {/* SECTION 2: Quick Stats */}
+          {/* SECTION 2: Quick Stats Grid */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { label: 'Total Sales', value: formatCurrency(stats.totalSales), icon: DollarSign, color: 'indigo' },
+              { label: 'Total Sales', value: formatCurrency(stats.totalSales), icon: TrendingUp, color: 'indigo' },
               { label: 'Total Customers', value: stats.totalCustomers, icon: Users, color: 'emerald' },
               { label: 'Total Products', value: stats.totalProducts, icon: Package, color: 'amber' },
               { label: 'Pending Payments', value: formatCurrency(stats.pendingPayments), icon: CreditCard, color: 'rose' }
             ].map((stat, i) => (
-              <div key={i} className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group">
+              <div key={i} className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition-all group flex items-start gap-4">
                 <div className={cn(
-                  "w-12 h-12 rounded-2xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110",
+                  "w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105",
                   stat.color === 'indigo' ? "bg-indigo-50 text-indigo-600" :
                   stat.color === 'emerald' ? "bg-emerald-50 text-emerald-600" :
                   stat.color === 'amber' ? "bg-amber-50 text-amber-600" :
                   "bg-rose-50 text-rose-600"
                 )}>
-                  <stat.icon size={24} />
+                  <stat.icon size={20} />
                 </div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{stat.label}</p>
-                <p className="text-xl font-black text-slate-900">{stat.value}</p>
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">{stat.label}</p>
+                  <p className="text-lg font-black text-slate-900">{stat.value}</p>
+                </div>
               </div>
             ))}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-3 space-y-8">
+            <div className="lg:col-span-2 space-y-8">
               {/* SECTION 3: Business Details */}
               <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-8 border-b border-slate-100 flex justify-between items-center">
+                <div className="p-6 md:p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-slate-100 rounded-xl text-slate-600">
+                    <div className="p-2.5 bg-white shadow-sm rounded-xl text-slate-700">
                       <Briefcase size={20} />
                     </div>
-                    <h3 className="font-bold text-slate-900 text-lg">Business Details</h3>
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-lg leading-none mb-1">Business Details</h3>
+                      <p className="text-xs text-slate-500 font-medium">Manage your contact and location info</p>
+                    </div>
                   </div>
                   {!isEditing && (
                     <button 
-                      onClick={() => {
-                        const isGoogleUser = user?.providerData.some(p => p.providerId === 'google.com');
-                        if (isGoogleUser) {
-                          setIsEditing(true);
-                        } else {
-                          setShowPasswordPrompt(true);
-                        }
-                      }}
-                      className="text-sm font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                      onClick={() => setIsEditing(true)}
+                      className="w-10 h-10 flex items-center justify-center text-slate-600 hover:text-indigo-600 hover:bg-white rounded-xl shadow-sm transition-all border border-slate-200"
                     >
-                      Edit Details
-                      <ChevronRight size={16} />
+                      <Edit3 size={18} />
                     </button>
                   )}
                 </div>
                 
                 {isEditing ? (
-                  <form onSubmit={handleSubmit} className="p-8 space-y-8">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <form onSubmit={handleSubmit} className="p-6 md:p-8 space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] ml-1">Business Name</label>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] ml-1">Business Name</label>
                         <div className="relative group">
                           <Building size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                           <input
                             name="businessName"
                             required
                             defaultValue={profile?.businessName}
-                            className="w-full pl-12 pr-4 py-4 bg-slate-50 border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all outline-none"
+                            className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:bg-white focus:border-transparent transition-all outline-none font-medium"
                             placeholder="e.g. Quin Inc."
                           />
                         </div>
                       </div>
 
                       <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] ml-1">Owner Name</label>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] ml-1">Owner Name</label>
                         <div className="relative group">
                           <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                           <input
                             name="ownerName"
                             required
                             defaultValue={profile?.ownerName}
-                            className="w-full pl-12 pr-4 py-4 bg-slate-50 border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all outline-none"
+                            className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:bg-white focus:border-transparent transition-all outline-none font-medium"
                             placeholder="e.g. John Doe"
                           />
                         </div>
                       </div>
 
                       <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] ml-1">Email Address</label>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] ml-1">Email Address</label>
                         <div className="relative group">
                           <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                           <input
@@ -557,62 +530,62 @@ export function Profile({ user, ownerId, role, onLogout }: {
                             type="email"
                             required
                             defaultValue={profile?.email}
-                            className="w-full pl-12 pr-4 py-4 bg-slate-50 border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all outline-none"
+                            className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:bg-white focus:border-transparent transition-all outline-none font-medium"
                             placeholder="e.g. contact@quin.com"
                           />
                         </div>
                       </div>
 
                       <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] ml-1">Phone Number</label>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] ml-1">Phone Number</label>
                         <div className="relative group">
                           <Phone size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                           <input
                             name="phone"
                             required
                             defaultValue={profile?.phone ? formatPhone(profile.phone) : ''}
-                            className="w-full pl-12 pr-4 py-4 bg-slate-50 border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all outline-none"
+                            className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:bg-white focus:border-transparent transition-all outline-none font-medium"
                             placeholder="e.g. +91 98765 43210"
                           />
                         </div>
                       </div>
 
                       <div className="space-y-2 md:col-span-2">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] ml-1">Business Address</label>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] ml-1">Business Address</label>
                         <div className="relative group">
-                          <MapPin size={18} className="absolute left-4 top-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                          <MapPin size={18} className="absolute left-4 top-4 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                           <textarea
                             name="address"
                             required
                             defaultValue={profile?.address}
                             rows={3}
-                            className="w-full pl-12 pr-4 py-4 bg-slate-50 border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all outline-none resize-none"
+                            className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:bg-white focus:border-transparent transition-all outline-none resize-none font-medium"
                             placeholder="e.g. 123, Business Park, Sector 62, Noida, UP"
                           />
                         </div>
                       </div>
 
                       <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] ml-1">GSTIN (Optional)</label>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] ml-1">GSTIN (Optional)</label>
                         <div className="relative group">
                           <FileText size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                           <input
                             name="gstin"
                             defaultValue={profile?.gstin}
-                            className="w-full pl-12 pr-4 py-4 bg-slate-50 border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all outline-none uppercase"
+                            className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:bg-white focus:border-transparent transition-all outline-none font-medium uppercase"
                             placeholder="e.g. 09AAAAA0000A1Z5"
                           />
                         </div>
                       </div>
 
                       <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] ml-1">State</label>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] ml-1">State</label>
                         <div className="relative group">
                           <Globe size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                           <select
                             name="state"
                             defaultValue={profile?.state || 'Uttar Pradesh'}
-                            className="w-full pl-12 pr-4 py-4 bg-slate-50 border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all outline-none appearance-none"
+                            className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:bg-white focus:border-transparent transition-all outline-none appearance-none font-medium"
                           >
                             <option value="Andhra Pradesh">Andhra Pradesh</option>
                             <option value="Arunachal Pradesh">Arunachal Pradesh</option>
@@ -655,17 +628,17 @@ export function Profile({ user, ownerId, role, onLogout }: {
                       </div>
                     </div>
 
-                    <div className="pt-8 flex gap-4">
+                    <div className="pt-4 flex gap-4">
                       <button
                         type="button"
                         onClick={() => setIsEditing(false)}
-                        className="flex-1 px-6 py-4 border border-slate-200 text-slate-600 rounded-2xl font-bold hover:bg-slate-50 transition-all active:scale-95"
+                        className="flex-1 px-6 py-3 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-all active:scale-95"
                       >
                         Cancel
                       </button>
                       <button
                         type="submit"
-                        className="flex-1 px-6 py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 flex items-center justify-center gap-2 active:scale-95"
+                        className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2 active:scale-95"
                       >
                         <Save size={18} />
                         Save Changes
@@ -673,144 +646,136 @@ export function Profile({ user, ownerId, role, onLogout }: {
                     </div>
                   </form>
                 ) : (
-                  <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-y-8 gap-x-12">
-                    {[
-                      { label: 'Phone Number', value: profile?.phone ? formatPhone(profile.phone) : 'Not provided', icon: Phone },
-                      { label: 'Email Address', value: profile?.email || 'Not provided', icon: Mail },
-                      { label: 'Business Address', value: profile?.address || 'Not provided', icon: MapPin, full: true },
-                      { label: 'GST Number', value: profile?.gstin || 'Not provided', icon: FileText },
-                      { label: 'State', value: profile?.state || 'Not provided', icon: Globe }
-                    ].map((info, i) => (
-                      <div key={i} className={cn("flex items-start gap-4 group", info.full && "md:col-span-2")}>
-                        <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors shrink-0">
-                          <info.icon size={18} />
+                  <div className="p-6 md:p-8 space-y-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-6 gap-x-8">
+                      {[
+                        { label: 'Email Address', value: profile?.email || 'Not provided', icon: Mail },
+                        { label: 'Phone Number', value: profile?.phone ? formatPhone(profile.phone) : 'Not provided', icon: Phone },
+                        { label: 'GST Number', value: profile?.gstin || 'Not provided', icon: FileText },
+                        { label: 'State', value: profile?.state || 'Not provided', icon: Globe },
+                        { label: 'Business Address', value: profile?.address || 'Not provided', icon: MapPin, full: true }
+                      ].map((info, i) => (
+                        <div key={i} className={cn("flex flex-col gap-1.5", info.full && "sm:col-span-2")}>
+                          <div className="flex items-center gap-2 text-slate-500">
+                            <info.icon size={16} />
+                            <p className="text-[10px] font-bold uppercase tracking-widest">{info.label}</p>
+                          </div>
+                          <p className="text-slate-900 font-bold bg-slate-50 px-4 py-3 rounded-xl border border-slate-100">{info.value}</p>
                         </div>
-                        <div className="space-y-1">
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">
-                            {info.label}
-                          </p>
-                          <p className="text-slate-900 font-bold leading-relaxed">{info.value}</p>
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
+            </div>
 
+            <div className="space-y-8">
               {/* SECTION 4: Business Settings */}
               <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-8 border-b border-slate-100">
+                <div className="p-6 border-b border-slate-100 bg-slate-50">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-slate-100 rounded-xl text-slate-600">
+                    <div className="p-2.5 bg-white shadow-sm rounded-xl text-slate-700">
                       <Settings size={20} />
                     </div>
-                    <h3 className="font-bold text-slate-900 text-lg">Business Settings</h3>
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-lg leading-none mb-1">Preferences</h3>
+                      <p className="text-xs text-slate-500 font-medium">App settings & customization</p>
+                    </div>
                   </div>
                 </div>
-                <div className="p-8 space-y-8">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="space-y-6">
-                      <div className="flex items-center justify-between group">
-                        <div className="space-y-0.5">
-                          <h4 className="font-bold text-slate-900">Tax Setup</h4>
-                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Default GST Percentage</p>
-                        </div>
-                        <div className="flex items-center gap-1 bg-slate-50 px-4 py-2 rounded-xl border border-slate-200 shadow-inner focus-within:ring-2 focus-within:ring-indigo-600 focus-within:bg-white transition-all">
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.1"
-                            defaultValue={profile?.taxPercentage ?? 10}
-                            className="w-12 bg-transparent font-black text-slate-900 text-right outline-none"
-                            onBlur={async (e) => {
-                              const newTax = parseFloat(e.target.value);
-                              if (!isNaN(newTax) && newTax !== profile?.taxPercentage) {
-                                const updatedProfile = profile 
-                                  ? { ...profile, taxPercentage: newTax }
-                                  : {
-                                      userId: ownerId,
-                                      businessName: '',
-                                      ownerName: '',
-                                      email: '',
-                                      phone: '',
-                                      address: '',
-                                      taxPercentage: newTax,
-                                      trackInventory: true
-                                    };
-                                await handleSaveProfile(updatedProfile);
-                                setProfile(updatedProfile);
-                                setShowSuccess(true);
-                                setTimeout(() => setShowSuccess(false), 3000);
-                              }
-                            }}
-                          />
-                          <span className="font-black text-slate-900">%</span>
-                        </div>
+                
+                <div className="divide-y divide-slate-100">
+                  {/* Setting 1: Tax */}
+                  <div className="p-6 space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-0.5">
+                        <h4 className="font-bold text-slate-900 text-sm">Default Tax (GST)</h4>
+                        <p className="text-xs text-slate-500 leading-tight">Applied automatically to new invoices</p>
                       </div>
-                      <div className="flex items-center justify-between group">
-                        <div className="space-y-0.5">
-                          <h4 className="font-bold text-slate-900">Inventory Tracking</h4>
-                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Global stock management</p>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input 
-                            type="checkbox" 
-                            checked={profile?.trackInventory ?? true}
-                            onChange={async (e) => {
-                              const newValue = e.target.checked;
+                      <div className="flex items-center gap-1 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 focus-within:ring-2 focus-within:ring-indigo-600 focus-within:bg-white transition-all shrink-0">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          defaultValue={profile?.taxPercentage ?? 10}
+                          className="w-10 bg-transparent font-black text-slate-900 text-right outline-none text-sm"
+                          onBlur={async (e) => {
+                            const newTax = parseFloat(e.target.value);
+                            if (!isNaN(newTax) && newTax !== profile?.taxPercentage) {
                               const updatedProfile = profile 
-                                ? { ...profile, trackInventory: newValue }
-                                : {
-                                    userId: ownerId,
-                                    businessName: '',
-                                    ownerName: '',
-                                    email: '',
-                                    phone: '',
-                                    address: '',
-                                    taxPercentage: 10,
-                                    trackInventory: newValue
-                                  };
+                                ? { ...profile, taxPercentage: newTax }
+                                : { userId: ownerId, businessName: '', ownerName: '', email: '', phone: '', address: '', taxPercentage: newTax, trackInventory: true };
                               await handleSaveProfile(updatedProfile);
                               setProfile(updatedProfile);
                               setShowSuccess(true);
                               setTimeout(() => setShowSuccess(false), 3000);
-                            }}
-                          className="sr-only peer" 
-                          />
-                          <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                        </label>
+                            }
+                          }}
+                        />
+                        <span className="font-black text-slate-500 text-sm">%</span>
                       </div>
                     </div>
-                    <div className="space-y-6">
-                      <div className="flex items-center justify-between group">
-                        <div className="space-y-0.5">
-                          <h4 className="font-bold text-slate-900">Currency</h4>
-                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Default billing currency</p>
-                        </div>
-                        <div className="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-xl border border-slate-200">
-                          <IndianRupee size={14} className="text-slate-400" />
-                          <span className="font-black text-slate-900">INR (₹)</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between group">
-                        <div className="space-y-0.5">
-                          <h4 className="font-bold text-slate-900">Invoice Theme</h4>
-                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Custom branding & layout</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded border border-slate-100">
-                            {profile?.invoiceTheme || 'modern'}
-                          </span>
-                          <button 
-                            onClick={() => setShowThemePicker(!showThemePicker)}
-                            className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all border border-indigo-100"
-                          >
-                            {showThemePicker ? 'Close' : 'Customize'}
-                          </button>
-                        </div>
-                      </div>
+                  </div>
 
+                  {/* Setting 2: Inventory Tracking */}
+                  <div className="p-6 space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-0.5">
+                        <h4 className="font-bold text-slate-900 text-sm">Inventory Tracking</h4>
+                        <p className="text-xs text-slate-500 leading-tight">Deduct stock automatically</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input 
+                          type="checkbox" 
+                          checked={profile?.trackInventory ?? true}
+                          onChange={async (e) => {
+                            const newValue = e.target.checked;
+                            const updatedProfile = profile 
+                              ? { ...profile, trackInventory: newValue }
+                              : { userId: ownerId, businessName: '', ownerName: '', email: '', phone: '', address: '', taxPercentage: 10, trackInventory: newValue };
+                            await handleSaveProfile(updatedProfile);
+                            setProfile(updatedProfile);
+                            setShowSuccess(true);
+                            setTimeout(() => setShowSuccess(false), 3000);
+                          }}
+                          className="sr-only peer" 
+                        />
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Setting 3: Currency */}
+                  <div className="p-6 space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-0.5">
+                        <h4 className="font-bold text-slate-900 text-sm">Currency</h4>
+                        <p className="text-xs text-slate-500 leading-tight">Default accounting currency</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 shrink-0">
+                        <IndianRupee size={14} className="text-slate-500" />
+                        <span className="font-bold text-slate-900 text-sm">INR</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Setting 4: Invoice Theme */}
+                  <div className="p-6 space-y-3">
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-0.5">
+                          <h4 className="font-bold text-slate-900 text-sm">Invoice Layout</h4>
+                          <p className="text-xs text-slate-500 leading-tight">Print & PDF template</p>
+                        </div>
+                        <button 
+                          onClick={() => setShowThemePicker(!showThemePicker)}
+                          className="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-all border border-indigo-100 shrink-0"
+                        >
+                          {profile?.invoiceTheme || 'modern'}
+                        </button>
+                      </div>
+                      
                       <AnimatePresence>
                         {showThemePicker && (
                           <motion.div
@@ -819,34 +784,24 @@ export function Profile({ user, ownerId, role, onLogout }: {
                             exit={{ opacity: 0, height: 0 }}
                             className="overflow-hidden"
                           >
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                            <div className="grid grid-cols-2 gap-2 mt-2">
                               {(['modern', 'classic', 'minimal', 'bold', 'elegant'] as const).map((t) => (
                                 <button
                                   key={t}
                                   onClick={async () => {
                                     const updatedProfile = profile 
                                       ? { ...profile, invoiceTheme: t }
-                                      : {
-                                          userId: ownerId,
-                                          businessName: '',
-                                          ownerName: '',
-                                          email: '',
-                                          phone: '',
-                                          address: '',
-                                          taxPercentage: 10,
-                                          trackInventory: true,
-                                          invoiceTheme: t
-                                        };
+                                      : { userId: ownerId, businessName: '', ownerName: '', email: '', phone: '', address: '', taxPercentage: 10, trackInventory: true, invoiceTheme: t };
                                     await handleSaveProfile(updatedProfile);
                                     setProfile(updatedProfile);
                                     setShowSuccess(true);
                                     setTimeout(() => setShowSuccess(false), 3000);
                                   }}
                                   className={cn(
-                                    "py-2 px-3 rounded-xl text-[10px] font-bold capitalize transition-all border",
+                                    "py-2 px-3 rounded-lg text-xs font-bold capitalize transition-all border outline-none",
                                     (profile?.invoiceTheme || 'modern') === t 
-                                      ? "bg-slate-900 text-white border-slate-900 shadow-md" 
-                                      : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                                      ? "bg-slate-900 text-white border-slate-900 shadow-sm ring-2 ring-slate-900/20 ring-offset-1" 
+                                      : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
                                   )}
                                 >
                                   {t}
@@ -860,32 +815,33 @@ export function Profile({ user, ownerId, role, onLogout }: {
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="space-y-8">
               {/* SECTION 7: Actions */}
-              <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm space-y-4">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="p-2 bg-rose-50 rounded-xl text-rose-600">
+              <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-rose-200 shadow-sm space-y-4">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2.5 bg-rose-50 rounded-xl text-rose-600">
                     <AlertCircle size={20} />
                   </div>
-                  <h3 className="font-bold text-slate-900 text-lg">Danger Zone</h3>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-lg leading-none mb-1">Danger Zone</h3>
+                    <p className="text-xs text-rose-600/80 font-medium">Irreversible actions</p>
+                  </div>
                 </div>
                 
                 <div className="space-y-3">
                   <button
                     onClick={onLogout}
-                    className="w-full py-4 bg-slate-50 text-slate-900 rounded-2xl font-bold hover:bg-slate-100 transition-all flex items-center justify-center gap-3 border border-slate-100 group"
+                    className="w-full py-3 bg-slate-50 text-slate-700 rounded-xl font-bold hover:bg-slate-100 transition-all flex items-center justify-center gap-2 border border-slate-200 group"
                   >
-                    <LogOut size={18} className="text-slate-400 group-hover:text-amber-600 transition-colors" />
+                    <LogOut size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
                     Logout from Device
                   </button>
                   <button
                     onClick={handleDeleteBusiness}
-                    className="w-full py-4 bg-rose-50 text-rose-600 rounded-2xl font-bold hover:bg-rose-100 transition-all flex items-center justify-center gap-3 border border-rose-100 group"
+                    className="w-full py-3 bg-rose-50 text-rose-700 rounded-xl font-bold hover:bg-rose-100 transition-all flex items-center justify-center gap-2 border border-rose-100 group"
                   >
-                    <Trash2 size={18} className="group-hover:animate-bounce" />
-                    Delete Business Profile
+                    <Trash2 size={18} className="text-rose-500 group-hover:animate-bounce" />
+                    Delete Business Data
                   </button>
                 </div>
               </div>
@@ -1220,51 +1176,47 @@ function StaffProfileView({ user, profile, currentStaff, onLogout }: {
   onLogout: () => void;
 }) {
   return (
-    <div className="space-y-8">
-      <div className="relative overflow-hidden bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 rounded-[2.5rem] p-8 text-white shadow-2xl border border-white/10">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/20 blur-[120px] -mr-48 -mt-48 animate-pulse" />
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-emerald-500/10 blur-[120px] -ml-48 -mb-48" />
+    <div className="space-y-8 max-w-3xl mx-auto">
+      <div className="relative overflow-hidden bg-white rounded-[2.5rem] p-8 md:p-10 shadow-lg border border-slate-200">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-50 blur-[100px] rounded-full -mr-48 -mt-48 pointer-events-none" />
         
-        <div className="relative flex flex-col md:flex-row gap-10 items-center md:items-start">
-          <div className="w-36 h-36 bg-white/10 backdrop-blur-xl rounded-[2rem] flex items-center justify-center overflow-hidden border border-white/20 shadow-2xl">
+        <div className="relative flex flex-col md:flex-row gap-8 items-center md:items-start text-center md:text-left">
+          <div className="w-32 h-32 md:w-40 md:h-40 bg-slate-50 rounded-full flex items-center justify-center overflow-hidden border-4 border-white shadow-xl shrink-0">
             {profile?.logo ? (
               <img src={profile.logo} alt="Company Logo" className="w-full h-full object-cover" />
             ) : (
-              <div className="flex flex-col items-center gap-2">
-                <Building size={48} className="text-white/20" />
-                <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">No Logo</span>
-              </div>
+              <Building size={40} className="text-slate-300" />
             )}
           </div>
 
-          <div className="flex-1 text-center md:text-left space-y-6">
-            <div className="space-y-2">
-              <div className="flex items-center justify-center md:justify-start gap-3">
-                <h2 className="text-4xl font-black tracking-tight drop-shadow-sm">{currentStaff?.name || user.displayName || 'Staff Member'}</h2>
-                <div className="flex items-center gap-1 bg-emerald-500/20 backdrop-blur-md px-3 py-1.5 rounded-lg border border-emerald-400/30">
-                  <BadgeCheck className="text-emerald-400 w-4 h-4" />
-                  <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-wider">
+          <div className="flex-1 space-y-4">
+            <div className="space-y-1.5">
+              <div className="flex flex-col md:flex-row items-center gap-3">
+                <h2 className="text-3xl font-black text-slate-900 tracking-tight">{currentStaff?.name || user.displayName || 'Staff Member'}</h2>
+                <div className="flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100">
+                  <BadgeCheck className="text-emerald-600 w-4 h-4" />
+                  <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">
                     {currentStaff?.role === 'sales_manager' ? 'Sales Manager' : 
                      currentStaff?.role === 'inventory_manager' ? 'Inventory Manager' : 
                      currentStaff?.role === 'ca' ? 'Chartered Accountant' : 'Staff'}
                   </span>
                 </div>
               </div>
-              <p className="text-indigo-200/70 font-semibold flex items-center justify-center md:justify-start gap-2 text-lg">
-                <Building size={18} className="text-indigo-400" />
+              <p className="text-slate-500 font-medium flex items-center justify-center md:justify-start gap-2 text-lg">
+                <Building size={18} className="text-slate-400" />
                 {profile?.businessName || 'Company Name'}
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-white/10">
-              <div className="flex items-center gap-3 text-indigo-100">
-                <Mail size={18} className="text-indigo-400" />
-                <span className="text-sm">{user.email}</span>
+            <div className="flex flex-col sm:flex-row gap-4 pt-4 border-t border-slate-100 items-center md:items-start justify-center md:justify-start">
+              <div className="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
+                <Mail size={16} className="text-slate-400" />
+                <span className="text-sm font-medium text-slate-700">{user.email}</span>
               </div>
               {currentStaff?.phone && (
-                <div className="flex items-center gap-3 text-indigo-100">
-                  <Phone size={18} className="text-indigo-400" />
-                  <span className="text-sm">{currentStaff.phone}</span>
+                <div className="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
+                  <Phone size={16} className="text-slate-400" />
+                  <span className="text-sm font-medium text-slate-700">{currentStaff.phone}</span>
                 </div>
               )}
             </div>
@@ -1272,19 +1224,22 @@ function StaffProfileView({ user, profile, currentStaff, onLogout }: {
         </div>
       </div>
 
-      <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm space-y-4">
+      <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-200 shadow-sm space-y-4">
         <div className="flex items-center gap-3 mb-2">
-          <div className="p-2 bg-rose-50 rounded-xl text-rose-600">
-            <LogOut size={20} />
+          <div className="p-2.5 bg-slate-50 rounded-xl text-slate-700 border border-slate-100 shadow-sm">
+            <Lock size={20} />
           </div>
-          <h3 className="font-bold text-slate-900 text-lg">Account Actions</h3>
+          <div>
+            <h3 className="font-bold text-slate-900 text-lg leading-none mb-1">Account Actions</h3>
+            <p className="text-xs text-slate-500 font-medium">Manage your session securely</p>
+          </div>
         </div>
         
         <button
           onClick={onLogout}
-          className="w-full py-4 bg-slate-50 text-slate-900 rounded-2xl font-bold hover:bg-slate-100 transition-all flex items-center justify-center gap-3 border border-slate-100 group"
+          className="w-full py-4 bg-slate-50 text-slate-700 rounded-2xl font-bold hover:bg-slate-100 transition-all flex items-center justify-center gap-3 border border-slate-200 group mt-4 active:scale-95"
         >
-          <LogOut size={18} className="text-slate-400 group-hover:text-amber-600 transition-colors" />
+          <LogOut size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
           Logout from Device
         </button>
       </div>

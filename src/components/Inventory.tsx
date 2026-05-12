@@ -3,7 +3,6 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { type Product, UserRole } from '../db';
 import { Plus, Search, Edit2, Trash2, AlertTriangle, Package, Database, Sparkles, Loader2, Camera, X } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
-import { PasswordPrompt } from './PasswordPrompt';
 import { db } from '../lib/firebase';
 import { collection, query, where, getDocs, doc, writeBatch, getDoc } from 'firebase/firestore';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -15,7 +14,6 @@ export function Inventory({ user, ownerId, role }: { user: FirebaseUser; ownerId
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [pendingAction, setPendingAction] = useState<{ type: 'add' | 'edit' | 'delete' | 'bulk_update', product?: Product }>({ type: 'add' });
   const [sortBy, setSortBy] = useState<'recent' | 'oldest' | 'name'>('recent');
@@ -384,26 +382,6 @@ export function Inventory({ user, ownerId, role }: { user: FirebaseUser; ownerId
     setProducts(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Product)));
   };
 
-  const handleActionSuccess = () => {
-    if (pendingAction.type === 'add') {
-      setEditingProduct(null);
-      setSkuValue('');
-      setImageFiles([]);
-      setImagePreviews([]);
-      setIsModalOpen(true);
-    } else if (pendingAction.type === 'edit' && pendingAction.product) {
-      setEditingProduct(pendingAction.product);
-      setSkuValue(pendingAction.product.sku);
-      setImageFiles([]);
-      setImagePreviews([]);
-      setIsModalOpen(true);
-    } else if (pendingAction.type === 'delete' && pendingAction.product?.id) {
-      deleteProduct(pendingAction.product.id);
-    } else if (pendingAction.type === 'bulk_update') {
-      setIsBulkModalOpen(true);
-    }
-  };
-
   const deleteProduct = async (id: string) => {
     try {
       await deleteInventoryProduct(id);
@@ -421,40 +399,27 @@ export function Inventory({ user, ownerId, role }: { user: FirebaseUser; ownerId
 
   const triggerAction = (action: { type: 'add' | 'edit' | 'delete' | 'bulk_update', product?: Product }) => {
     setPendingAction(action);
-    const isGoogleUser = user?.providerData.some(p => p.providerId === 'google.com');
-    if (isGoogleUser) {
-      if (action.type === 'add') {
-        setEditingProduct(null);
-        setSkuValue('');
-        setImageFiles([]);
-        setImagePreviews([]);
-        setIsModalOpen(true);
-      } else if (action.type === 'edit' && action.product) {
-        setEditingProduct(action.product);
-        setSkuValue(action.product.sku);
-        setImageFiles([]);
-        setImagePreviews([]);
-        setIsModalOpen(true);
-      } else if (action.type === 'delete' && action.product?.id) {
-        deleteProduct(action.product.id);
-      } else if (action.type === 'bulk_update') {
-        setIsBulkModalOpen(true);
-      }
-    } else {
-      setShowPasswordPrompt(true);
+    if (action.type === 'add') {
+      setEditingProduct(null);
+      setSkuValue('');
+      setImageFiles([]);
+      setImagePreviews([]);
+      setIsModalOpen(true);
+    } else if (action.type === 'edit' && action.product) {
+      setEditingProduct(action.product);
+      setSkuValue(action.product.sku);
+      setImageFiles([]);
+      setImagePreviews([]);
+      setIsModalOpen(true);
+    } else if (action.type === 'delete' && action.product?.id) {
+      deleteProduct(action.product.id);
+    } else if (action.type === 'bulk_update') {
+      setIsBulkModalOpen(true);
     }
   };
 
   return (
     <div className="space-y-6">
-      <PasswordPrompt
-        isOpen={showPasswordPrompt}
-        onClose={() => setShowPasswordPrompt(false)}
-        onSuccess={handleActionSuccess}
-        title="Inventory Security"
-        description={`Please enter your password to ${pendingAction.type} product.`}
-        userId={ownerId}
-      />
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Inventory Management</h1>
