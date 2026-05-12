@@ -1,56 +1,55 @@
 @import "tailwindcss";
 
 @media print {
-  /* Hide EVERYTHING by default */
-  html, body, #root, .no-print, header, footer, nav, button, .notification-container {
+  /* Hide absolutely everything in the body by default */
+  body > * {
     display: none !important;
     visibility: hidden !important;
-    height: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: hidden !important;
   }
   
-  /* Show only the print portal container */
-  .print-only {
+  /* Selectively show ONLY the print portal */
+  body > .print-only {
     display: block !important;
     visibility: visible !important;
-    position: static !important;
-    width: auto !important;
-    height: auto !important;
-    margin: 0 !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
     padding: 0 !important;
-    background: transparent !important;
+    margin: 0 !important;
+    background: white !important;
   }
   
   .print-only * {
     visibility: visible !important;
   }
 
+  /* Ensure the invoice template takes full width and professional styling */
+  .print-only .invoice-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Fix for images in print */
   .print-only img {
     display: block !important;
     max-width: 100% !important;
     height: auto !important;
-    page-break-inside: avoid;
-  }
-
-  /* Force standard colors for print to avoid oklch errors in some browsers/engines */
-  :root {
-    --color-slate-900: #0f172a !important;
-    --color-slate-500: #64748b !important;
-    --color-indigo-600: #4f46e5 !important;
-    --color-emerald-600: #059669 !important;
-  }
-
-  body {
-    background: white !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
   }
 
   @page {
-    margin: 0;
-    size: auto;
+    margin: 10mm;
+    size: A4 portrait;
+  }
+
+  /* Force display of backgrounds for professional look */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }
 

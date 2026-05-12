@@ -529,8 +529,11 @@ export function Dashboard({
       {/* Hidden Invoice for Image Generation */}
       <div className="fixed -left-[9999px] top-0 pointer-events-none">
         {isSharingImage && selectedInvoice && (
-          <div ref={hiddenInvoiceRef} className="bg-white p-12 w-[210mm]">
-            <InvoiceView invoice={selectedInvoice} profile={profile || undefined} />
+          <div 
+            ref={hiddenInvoiceRef} 
+            className="bg-white w-[210mm] min-h-[297mm] p-0"
+          >
+            <InvoiceView invoice={selectedInvoice} profile={profile || undefined} theme={profile?.invoiceTheme || 'modern'} />
           </div>
         )}
       </div>
