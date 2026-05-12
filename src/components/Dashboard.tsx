@@ -11,7 +11,7 @@ import { WhatsAppIcon } from './WhatsAppIcon';
 import { formatCurrency, cn } from '../lib/utils';
 import { PrintModal } from './PrintModal';
 import { InvoiceView } from './InvoiceView';
-import html2canvas from 'html2canvas';
+import { domToPng } from 'modern-screenshot';
 import { getInvoices, getProfile, updateInvoice, getPayments, getExpenses, type Profile as ProfileType } from '../lib/firestore';
 import { db } from '../lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -192,15 +192,12 @@ export function Dashboard({
       }
       
       try {
-        const canvas = await html2canvas(hiddenInvoiceRef.current, {
+        const dataUrl = await domToPng(hiddenInvoiceRef.current, {
           scale: 2,
-          useCORS: true,
-          logging: false,
           backgroundColor: '#ffffff',
-          windowWidth: 800 // Ensure consistent width for capture
+          width: 800 // Ensure consistent width for capture
         });
         
-        const dataUrl = canvas.toDataURL('image/png');
         const blob = await (await fetch(dataUrl)).blob();
         const file = new File([blob], `invoice-${inv.invoiceNumber}.png`, { type: 'image/png' });
 

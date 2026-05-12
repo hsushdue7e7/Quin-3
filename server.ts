@@ -39,6 +39,10 @@ app.use((req, res, next) => {
 app.get("/api/health", (req, res) => res.json({ status: "ok", env: process.env.NODE_ENV }));
 
 app.get("/api/cron/reminders", async (req, res) => {
+  const secret = req.query.secret || req.headers['x-cron-secret'];
+  if (process.env.CRON_SECRET && secret !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
   const firestore = getDb();
   if (!firestore) return res.status(500).json({ error: "DB Error" });
   try {
@@ -47,7 +51,7 @@ app.get("/api/cron/reminders", async (req, res) => {
     if (!accountSid || !authToken) return res.status(500).json({ error: "Twilio Error" });
 
     const twilioClient = twilio(accountSid, authToken);
-    const invoicesSnapshot = await firestore.collection("invoices").get();
+    const invoicesSnapshot = await firestore.collection("invoices").where("creditAmount", ">", 0).get();
     const now = Date.now();
     const thirtyDays = 30 * 24 * 60 * 60 * 1000;
     let count = 0;

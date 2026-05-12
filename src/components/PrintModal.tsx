@@ -5,7 +5,7 @@ import { ThermalPrinterService } from '../services/ThermalPrinterService';
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import html2canvas from 'html2canvas';
+import { domToPng } from 'modern-screenshot';
 
 import { InvoiceView, type InvoiceTheme } from './InvoiceView';
 
@@ -25,6 +25,7 @@ export function PrintModal({
   const [isThermalMode, setIsThermalMode] = useState(false);
   const [theme, setTheme] = useState<InvoiceTheme>(invoice.type === 'quotation' ? 'tabular' : (profile?.invoiceTheme || 'modern'));
   const [isPrinting, setIsPrinting] = useState(false);
+  const [printImage, setPrintImage] = useState<string | null>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [printSuccess, setPrintSuccess] = useState(false);
   const [printerStatus, setPrinterStatus] = useState<{type: 'bt' | 'usb' | null, name: string | null}>({type: null, name: null});
@@ -38,8 +39,34 @@ export function PrintModal({
     });
   }, []);
 
-  const handleStandardPrint = () => {
-    window.print();
+  const handleStandardPrint = async () => {
+    if (!invoiceRef.current) return;
+    setIsPrinting(true);
+    
+    try {
+      // Generate clean image of the invoice using modern-screenshot (handles oklch)
+      const dataUrl = await domToPng(invoiceRef.current, {
+        scale: 3, 
+        backgroundColor: '#ffffff'
+      });
+      
+      setPrintImage(dataUrl);
+      
+      // Short delay to allow state update and image render in hidden container
+      setTimeout(() => {
+        window.print();
+        setTimeout(() => {
+          setPrintImage(null);
+          setIsPrinting(false);
+        }, 1000);
+      }, 500);
+    } catch (error) {
+      console.error('Print image error:', error);
+      // Fallback: Continue with standard print but log error
+      // The CSS in index.css will handle the clean print as fallback
+      window.print();
+      setIsPrinting(false);
+    }
   };
 
   useEffect(() => {
@@ -53,15 +80,12 @@ export function PrintModal({
     setIsSharing(true);
     
     try {
-      const canvas = await html2canvas(invoiceRef.current, {
+      const dataUrl = await domToPng(invoiceRef.current, {
         scale: 2,
-        useCORS: true,
-        logging: false,
         backgroundColor: '#ffffff',
-        windowWidth: isThermalMode ? 400 : 800
+        width: isThermalMode ? 400 : 800
       });
       
-      const dataUrl = canvas.toDataURL('image/png');
       const blob = await (await fetch(dataUrl)).blob();
       const file = new File([blob], `${invoice.type === 'quotation' ? 'quotation' : 'invoice'}-${invoice.invoiceNumber}.png`, { type: 'image/png' });
 
@@ -202,10 +226,15 @@ export function PrintModal({
               <div className="space-y-3">
                 <button 
                   onClick={handleStandardPrint}
-                  className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"
+                  disabled={isPrinting}
+                  className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 disabled:opacity-50"
                 >
-                  <Printer size={18} />
-                  System Print
+                  {isPrinting && !printImage ? (
+                    <RefreshCw size={18} className="animate-spin" />
+                  ) : (
+                    <Printer size={18} />
+                  )}
+                  {isPrinting && !printImage ? 'Generating...' : 'System Print'}
                 </button>
                 
                 <div className="pt-4 border-t border-slate-200 space-y-3">
@@ -315,6 +344,7 @@ export function PrintModal({
           {/* Preview Area */}
           <div className="flex-1 bg-slate-200 p-8 overflow-y-auto flex justify-center items-start">
             <div 
+              id="print-area-internal"
               ref={invoiceRef}
               className={cn(
                 "bg-white shadow-2xl transition-all duration-500 origin-top",
@@ -329,12 +359,23 @@ export function PrintModal({
 
       {createPortal(
         <div className="print-only">
-          <div className={cn(
-            "bg-white mx-auto",
-            isThermalMode ? "w-[80mm] p-4" : "w-full p-0"
-          )}>
-            <InvoiceView invoice={invoice} profile={profile} isThermalMode={isThermalMode} theme={theme} />
-          </div>
+          {printImage ? (
+            <div className="flex justify-center w-full">
+              <img 
+                src={printImage} 
+                alt="Invoice" 
+                className="w-full h-auto max-w-full"
+                style={{ maxHeight: '100vh', objectFit: 'contain' }}
+              />
+            </div>
+          ) : (
+            <div className={cn(
+              "bg-white mx-auto",
+              isThermalMode ? "w-[80mm] p-4" : "w-full p-0"
+            )}>
+              <InvoiceView invoice={invoice} profile={profile} isThermalMode={isThermalMode} theme={theme} />
+            </div>
+          )}
         </div>,
         document.body
       )}

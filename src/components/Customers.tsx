@@ -23,7 +23,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { PrintModal } from './PrintModal';
 import { InvoiceView } from './InvoiceView';
-import html2canvas from 'html2canvas';
+import { domToPng } from 'modern-screenshot';
 import { getInvoices, getPayments, getProfile, addPayment, updateInvoice, type Profile as ProfileType } from '../lib/firestore';
 
 export function Customers({ 
@@ -188,15 +188,12 @@ export function Customers({
       }
       
       try {
-        const canvas = await html2canvas(hiddenInvoiceRef.current, {
+        const dataUrl = await domToPng(hiddenInvoiceRef.current, {
           scale: 2,
-          useCORS: true,
-          logging: false,
           backgroundColor: '#ffffff',
-          windowWidth: 800
+          width: 800
         });
         
-        const dataUrl = canvas.toDataURL('image/png');
         const blob = await (await fetch(dataUrl)).blob();
         const file = new File([blob], `invoice-${inv.invoiceNumber}.png`, { type: 'image/png' });
         

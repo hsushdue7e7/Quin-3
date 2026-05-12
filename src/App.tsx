@@ -1,16 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense, lazy } from 'react';
 import { LayoutDashboard, Package, Receipt, BarChart3, User, LogOut, Settings, Menu, X, History, Cloud, Bot, AlertTriangle, Bell, Check, Users } from 'lucide-react';
-import { Dashboard } from './components/Dashboard';
-import { Inventory } from './components/Inventory';
-import { Billing } from './components/Billing';
-import { Transactions } from './components/Transactions';
-import { Customers } from './components/Customers';
-import { Reports } from './components/Reports';
-import { Login } from './components/Login';
-import { Profile } from './components/Profile';
-import B2BNetwork from './components/B2BNetwork';
-import { BusinessAssistant } from './components/BusinessAssistant';
-import { AddExpenseModal } from './components/AddExpenseModal';
+
+// Lazy load components
+const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
+const Inventory = lazy(() => import('./components/Inventory').then(m => ({ default: m.Inventory })));
+const Billing = lazy(() => import('./components/Billing').then(m => ({ default: m.Billing })));
+const Transactions = lazy(() => import('./components/Transactions').then(m => ({ default: m.Transactions })));
+const Customers = lazy(() => import('./components/Customers').then(m => ({ default: m.Customers })));
+const Reports = lazy(() => import('./components/Reports').then(m => ({ default: m.Reports })));
+const Login = lazy(() => import('./components/Login').then(m => ({ default: m.Login })));
+const Profile = lazy(() => import('./components/Profile').then(m => ({ default: m.Profile })));
+const B2BNetwork = lazy(() => import('./components/B2BNetwork'));
+const BusinessAssistant = lazy(() => import('./components/BusinessAssistant').then(m => ({ default: m.BusinessAssistant })));
+const AddExpenseModal = lazy(() => import('./components/AddExpenseModal').then(m => ({ default: m.AddExpenseModal })));
+
 import { SyncProvider } from './lib/sync';
 import { db } from './db';
 import { UserRole } from './db';
@@ -633,7 +636,12 @@ function AppContent() {
 
       <main className="flex-1 overflow-auto pb-20 md:pb-24">
         <div className="max-w-7xl mx-auto p-4 md:p-8">
-          <AnimatePresence mode="wait">
+          <Suspense fallback={
+            <div className="flex items-center justify-center h-64">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900"></div>
+            </div>
+          }>
+            <AnimatePresence mode="wait">
             {appMode === 'quin' ? (
               <motion.div
                 key={activeTab}
@@ -728,6 +736,7 @@ function AppContent() {
               </motion.div>
             )}
           </AnimatePresence>
+          </Suspense>
         </div>
       </main>
 
