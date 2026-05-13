@@ -85,26 +85,35 @@ export function InvoiceView({
 
   // A4 Professional Layout (GST Compatible)
   return (
-    <div className="text-black bg-white w-full max-w-[210mm] min-h-[297mm] mx-auto font-sans p-[15mm] print:p-0">
+    <div className="text-black bg-white w-full max-w-[210mm] min-h-[297mm] mx-auto font-sans p-[15mm] print:p-0 relative">
       {/* Header Info */}
       <div className="flex justify-between items-start mb-8 border-b-2 border-indigo-600 pb-6">
-        <div className="max-w-[60%]">
-          <h1 className="text-3xl font-black text-indigo-900 uppercase tracking-tighter mb-2">
-            {profile?.businessName || 'Business Name'}
-          </h1>
-          <div className="text-sm text-slate-600 space-y-1">
-            <p className="whitespace-pre-line">{profile?.address}</p>
-            {profile?.phone && <p>Contact: {formatPhone(profile.phone)}</p>}
-            {profile?.gstin && <p className="font-bold text-slate-900 mt-1">GSTIN: {profile.gstin}</p>}
+        <div className="flex gap-6 items-start max-w-[70%]">
+          {profile?.logo && (
+            <img src={profile.logo} alt="Business Logo" className="w-20 h-20 object-contain rounded-lg border border-slate-100 bg-white shadow-sm" />
+          )}
+          <div>
+            <h1 className="text-3xl font-black text-indigo-900 uppercase tracking-tighter mb-2 leading-none">
+              {profile?.businessName || 'Business Name'}
+            </h1>
+            <div className="text-sm text-slate-600 space-y-1">
+              <p className="whitespace-pre-line leading-relaxed">{profile?.address}</p>
+              {profile?.phone && <p className="font-medium text-slate-800">Contact: {formatPhone(profile.phone)}</p>}
+              {profile?.gstin && <p className="font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded inline-block mt-1 border border-slate-200">GSTIN: {profile.gstin}</p>}
+            </div>
           </div>
         </div>
         <div className="text-right">
-          <div className="bg-indigo-600 text-white px-4 py-2 rounded-lg inline-block mb-4">
-            <h2 className="text-xl font-bold uppercase">{invoice.type === 'quotation' ? 'Quotation' : 'Tax Invoice'}</h2>
+          <div className="bg-indigo-900 text-white px-6 py-2 rounded-xl inline-block mb-4 shadow-lg shadow-indigo-100">
+            <h2 className="text-xl font-bold uppercase tracking-widest">{invoice.type === 'quotation' ? 'Quotation' : 'Tax Invoice'}</h2>
           </div>
           <div className="text-sm space-y-1">
-            <p><span className="text-slate-500">Invoice No:</span> <span className="font-bold">#{invoice.invoiceNumber}</span></p>
-            <p><span className="text-slate-500">Date:</span> <span className="font-bold">{new Date(invoice.date).toLocaleDateString('en-IN')}</span></p>
+            <p className="text-slate-500 uppercase text-[10px] font-bold tracking-wider">Document Details</p>
+            <p><span className="text-slate-400">No:</span> <span className="font-bold text-slate-900">#{invoice.invoiceNumber}</span></p>
+            <p><span className="text-slate-400">Date:</span> <span className="font-bold text-slate-900">{new Date(invoice.date).toLocaleDateString('en-IN')}</span></p>
+            {invoice.type === 'quotation' && invoice.validityDate && (
+              <p className="mt-2 pt-2 border-t border-slate-100"><span className="text-slate-400">Valid Until:</span> <br/><span className="font-black text-red-600">{new Date(invoice.validityDate).toLocaleDateString('en-IN')}</span></p>
+            )}
           </div>
         </div>
       </div>
@@ -115,6 +124,7 @@ export function InvoiceView({
           <h3 className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mb-2">Details of Receiver (Billed To)</h3>
           <p className="text-lg font-bold text-indigo-900">{invoice.customerName}</p>
           <div className="text-sm text-slate-600 mt-1 space-y-0.5">
+            {invoice.customerAddress && <p className="whitespace-pre-line text-xs">{invoice.customerAddress}</p>}
             {invoice.customerMobile && <p>Phone: {invoice.customerMobile}</p>}
             {invoice.customerGstin && <p className="font-bold text-slate-900">GSTIN: {invoice.customerGstin}</p>}
           </div>
@@ -136,23 +146,25 @@ export function InvoiceView({
             <tr className="bg-indigo-900 text-white text-[10px] uppercase font-bold tracking-wider">
               <th className="py-3 px-4 rounded-tl-lg">#</th>
               <th className="py-3 px-4">Item Description</th>
-              {invoice.isGstInvoice && <th className="py-3 px-4 text-center">HSN</th>}
+              {invoice.isGstInvoice && <th className="py-3 px-4 text-center">HSN/SAC</th>}
               <th className="py-3 px-4 text-right">Qty</th>
+              <th className="py-3 px-4 text-center">Unit</th>
               <th className="py-3 px-4 text-right">Rate</th>
-              {invoice.isGstInvoice && <th className="py-3 px-4 text-right">GST</th>}
+              {invoice.isGstInvoice && <th className="py-3 px-4 text-right">GST %</th>}
               <th className="py-3 px-4 text-right rounded-tr-lg">Amount</th>
             </tr>
           </thead>
-          <tbody className="text-sm divide-y divide-slate-100">
+          <tbody className="text-sm divide-y divide-slate-100 font-medium">
             {invoice.items.map((item, i) => (
               <tr key={i} className="hover:bg-slate-50">
                 <td className="py-3 px-4 text-slate-400">{i + 1}</td>
-                <td className="py-3 px-4 font-medium text-indigo-900">{item.name}</td>
+                <td className="py-3 px-4 text-indigo-900">{item.name}</td>
                 {invoice.isGstInvoice && <td className="py-3 px-4 text-center text-slate-500 font-mono text-xs">{item.hsnCode || '-'}</td>}
-                <td className="py-3 px-4 text-right">{item.quantity}</td>
-                <td className="py-3 px-4 text-right">{formatCurrency(item.price).replace('₹', '')}</td>
-                {invoice.isGstInvoice && <td className="py-3 px-4 text-right text-xs">{item.gstRate}%</td>}
-                <td className="py-3 px-4 text-right font-bold text-indigo-900">{formatCurrency(item.total).replace('₹', '')}</td>
+                <td className="py-3 px-4 text-right text-indigo-900">{item.quantity}</td>
+                <td className="py-3 px-4 text-center text-slate-500 text-xs">{item.unit || 'pcs'}</td>
+                <td className="py-3 px-4 text-right text-indigo-900">{formatCurrency(item.price).replace('₹', '')}</td>
+                {invoice.isGstInvoice && <td className="py-3 px-4 text-right text-xs text-indigo-600">{item.gstRate}%</td>}
+                <td className="py-3 px-4 text-right font-bold text-indigo-950">{formatCurrency(item.total).replace('₹', '')}</td>
               </tr>
             ))}
             {/* Blank rows to ensure table looks substantial if few items */}
@@ -193,6 +205,13 @@ export function InvoiceView({
             <span className="text-slate-500">Subtotal</span>
             <span className="font-medium text-slate-900">{formatCurrency(invoice.subtotal)}</span>
           </div>
+
+          {invoice.discount ? (
+            <div className="flex justify-between text-sm py-1">
+              <span className="text-slate-500">Discount</span>
+              <span className="font-medium text-emerald-600">-{formatCurrency(invoice.discount)}</span>
+            </div>
+          ) : null}
           
           {invoice.isGstInvoice ? (
             <div className="space-y-2 py-2 border-y border-slate-100">

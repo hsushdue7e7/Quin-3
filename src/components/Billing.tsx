@@ -28,6 +28,7 @@ export function Billing({
   const canSave = role === 'admin' || role === 'sales_manager';
   const [customerName, setCustomerName] = useState('');
   const [customerMobile, setCustomerMobile] = useState('');
+  const [customerAddress, setCustomerAddress] = useState('');
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
   const [isDirectSell, setIsDirectSell] = useState(false);
   const [isFullPayment, setIsFullPayment] = useState(false);
@@ -35,6 +36,12 @@ export function Billing({
   const [customerGstin, setCustomerGstin] = useState('');
   const [stateOfSupply, setStateOfSupply] = useState('Uttar Pradesh');
   const [receivedAmount, setReceivedAmount] = useState<number | string>('');
+  const [discount, setDiscount] = useState<number | string>('');
+  const [validityDate, setValidityDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7); // Default 7 days
+    return d.toISOString().split('T')[0];
+  });
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'upi' | 'other'>('cash');
   const [taxPercentage, setTaxPercentage] = useState<number>(10);
   const [items, setItems] = useState<InvoiceItem[]>(initialItems || []);
@@ -133,8 +140,13 @@ export function Billing({
           setOriginalInvoice(invoice);
           setCustomerName(invoice.customerName);
           setCustomerMobile(invoice.customerMobile || '');
+          setCustomerAddress(invoice.customerAddress || '');
           setItems(invoice.items);
           setReceivedAmount(invoice.receivedAmount);
+          setDiscount(invoice.discount || '');
+          if (invoice.validityDate) {
+            setValidityDate(new Date(invoice.validityDate).toISOString().split('T')[0]);
+          }
           setPaymentMethod(invoice.paymentMethod || 'cash');
           setTaxPercentage(invoice.taxPercentage ?? 10);
           setIsFullPayment(invoice.receivedAmount >= invoice.total);
@@ -317,10 +329,13 @@ export function Billing({
       userId: ownerId,
       customerName: finalCustomerName,
       customerMobile: isDirectSell ? '' : customerMobile,
+      customerAddress: isDirectSell ? '' : customerAddress,
       customerGstin: isGstInvoice ? customerGstin : '',
       isGstInvoice,
       stateOfSupply,
       ...(isQuotation ? { type: 'quotation' as const } : { type: 'invoice' as const }),
+      validityDate: isQuotation ? new Date(validityDate).getTime() : undefined,
+      discount: parseFloat(String(discount)) || 0,
       items: itemsWithGst,
       subtotal,
       tax,
@@ -329,7 +344,7 @@ export function Billing({
       cgstTotal: isGstInvoice ? cgstTotal : 0,
       sgstTotal: isGstInvoice ? sgstTotal : 0,
       igstTotal: isGstInvoice ? igstTotal : 0,
-      total,
+      total: total - (parseFloat(String(discount)) || 0),
       receivedAmount: finalReceivedAmount,
       paymentMethod,
       creditAmount,
@@ -435,10 +450,13 @@ export function Billing({
     userId: ownerId,
     customerName: isDirectSell ? 'Walk-in Customer' : customerName,
     customerMobile: isDirectSell ? '' : customerMobile,
+    customerAddress: isDirectSell ? '' : customerAddress,
     customerGstin: isGstInvoice ? customerGstin : '',
     isGstInvoice,
     stateOfSupply,
     ...(isQuotation ? { type: 'quotation' as const } : { type: 'invoice' as const }),
+    validityDate: isQuotation ? new Date(validityDate).getTime() : undefined,
+    discount: parseFloat(String(discount)) || 0,
     items: itemsWithGst,
     subtotal,
     tax,
@@ -447,7 +465,7 @@ export function Billing({
     cgstTotal: isGstInvoice ? cgstTotal : 0,
     sgstTotal: isGstInvoice ? sgstTotal : 0,
     igstTotal: isGstInvoice ? igstTotal : 0,
-    total,
+    total: total - (parseFloat(String(discount)) || 0),
     receivedAmount: finalReceivedAmount,
     paymentMethod,
     creditAmount,
@@ -556,7 +574,7 @@ export function Billing({
                         onClick={addCustomItem}
                         className="flex-1 bg-indigo-600 text-white py-2 rounded hover:bg-indigo-700"
                       >
-                        Add to Sale/Invoice
+                        {isQuotation ? 'Add to Quotation' : 'Add to Sale/Invoice'}
                       </button>
                     </div>
                   </div>
@@ -569,28 +587,36 @@ export function Billing({
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-100">
                 <tr>
-                  <th className="px-6 py-3">Item</th>
+                  <th className="px-6 py-3">Item Name</th>
                   <th className="px-6 py-3">HSN/SAC</th>
-                  <th className="px-6 py-3">Unit</th>
-                  <th className="px-6 py-3">Price</th>
                   <th className="px-6 py-3">Qty</th>
-                  <th className="px-6 py-3">GST %</th>
-                  <th className="px-6 py-3">Total</th>
+                  <th className="px-6 py-3">Unit</th>
+                  <th className="px-6 py-3">Rate</th>
+                  <th className="px-6 py-3">Tax %</th>
+                  <th className="px-6 py-3">Amount</th>
                   <th className="px-6 py-3 text-right"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {items.map((item, index) => (
-                  <tr key={index} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-medium text-slate-900">{item.name}</td>
-                    <td className="px-6 py-4 text-slate-500 text-xs">{item.hsnCode || '-'}</td>
-                    <td className="px-6 py-4 text-slate-600 text-sm">
+                  <tr key={index} className="hover:bg-slate-50 transition-colors group">
+                    <td className="px-6 py-4 font-bold text-slate-900 min-w-[150px]">{item.name}</td>
+                    <td className="px-6 py-4 text-slate-500 text-xs font-mono">{item.hsnCode || '-'}</td>
+                    <td className="px-6 py-4">
+                      <input
+                        type="number"
+                        className="w-16 py-1 px-2 border border-slate-200 rounded focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                        value={item.quantity}
+                        onChange={(e) => updateQuantity(index, e.target.value)}
+                      />
+                    </td>
+                    <td className="px-6 py-4 text-slate-600 text-xs font-bold uppercase tracking-wider">
                       {(() => {
                         const product = products.find(p => p.id === item.productId);
                         if (product?.secondaryUnit) {
                           return (
                             <select
-                              className="w-full py-1 text-sm border-none bg-transparent focus:ring-0"
+                              className="w-full py-1 text-xs border border-slate-200 rounded focus:ring-0 bg-white"
                               value={item.unit}
                               onChange={(e) => updateUnit(index, e.target.value)}
                             >
@@ -599,31 +625,23 @@ export function Billing({
                             </select>
                           );
                         }
-                        return item.unit || '-';
+                        return item.unit || 'pcs';
                       })()}
                     </td>
                     <td className="px-6 py-4">
                       <div className="relative">
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">₹</span>
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]">₹</span>
                         <input
                           type="number"
-                          className="w-24 py-1 pl-5 text-sm"
+                          className="w-24 py-1 pl-5 pr-2 text-sm border border-slate-200 rounded focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                           value={item.price}
                           onChange={(e) => updatePrice(index, e.target.value)}
                         />
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <input
-                        type="number"
-                        className="w-20 py-1"
-                        value={item.quantity}
-                        onChange={(e) => updateQuantity(index, e.target.value)}
-                      />
-                    </td>
-                    <td className="px-6 py-4">
                       <select
-                        className="w-20 py-1 text-xs"
+                        className="w-20 py-1 text-xs border border-slate-200 rounded focus:ring-0 bg-white"
                         value={item.gstRate}
                         onChange={(e) => updateGstRate(index, parseFloat(e.target.value))}
                       >
@@ -634,7 +652,7 @@ export function Billing({
                         <option value="28">28%</option>
                       </select>
                     </td>
-                    <td className="px-6 py-4 font-semibold text-slate-900">{formatCurrency(item.total)}</td>
+                    <td className="px-6 py-4 font-black text-indigo-900">{formatCurrency(item.total)}</td>
                     <td className="px-6 py-4 text-right">
                       <button
                         onClick={() => removeItem(index)}
@@ -765,6 +783,35 @@ export function Billing({
                 </p>
               )}
             </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Customer Address</label>
+              <textarea
+                value={customerAddress}
+                onChange={(e) => setCustomerAddress(e.target.value)}
+                className="w-full text-sm min-h-[60px]"
+                placeholder="123 Street Name, City, State, ZIP"
+              />
+            </div>
+
+            {isQuotation && (
+              <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 space-y-4">
+                <h3 className="text-xs font-black text-indigo-900 uppercase tracking-widest flex items-center gap-2">
+                   <FileText size={14} />
+                   Quotation Specifics
+                </h3>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-indigo-600 uppercase tracking-wider">Validity Date</label>
+                  <input
+                    type="date"
+                    value={validityDate}
+                    onChange={(e) => setValidityDate(e.target.value)}
+                    className="w-full border-indigo-200 focus:ring-indigo-500 text-sm"
+                  />
+                  <p className="text-[10px] text-indigo-400 italic">Quotation expires after this date.</p>
+                </div>
+              </div>
+            )}
 
             {isGstInvoice && (
               <>
@@ -910,27 +957,27 @@ export function Billing({
               <span>{formatCurrency(subtotal)}</span>
             </div>
             {isGstInvoice ? (
-              <>
+              <div className="space-y-2 py-2 border-y border-white/10">
                 {!isInterState ? (
                   <>
                     <div className="flex justify-between">
-                      <span className="opacity-60">CGST Total</span>
-                      <span>{formatCurrency(cgstTotal)}</span>
+                      <span className="opacity-60 text-xs">CGST Total</span>
+                      <span className="text-xs">{formatCurrency(cgstTotal)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="opacity-60">SGST Total</span>
-                      <span>{formatCurrency(sgstTotal)}</span>
+                      <span className="opacity-60 text-xs">SGST Total</span>
+                      <span className="text-xs">{formatCurrency(sgstTotal)}</span>
                     </div>
                   </>
                 ) : (
                   <div className="flex justify-between">
-                    <span className="opacity-60">IGST Total</span>
-                    <span>{formatCurrency(igstTotal)}</span>
+                    <span className="opacity-60 text-xs text-indigo-400">IGST Total</span>
+                    <span className="text-xs">{formatCurrency(igstTotal)}</span>
                   </div>
                 )}
-              </>
+              </div>
             ) : (
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center py-1">
                 <div className="flex items-center gap-2">
                   <span className="opacity-60">Tax</span>
                   <div className="relative">
@@ -939,7 +986,7 @@ export function Billing({
                       step="0.1"
                       value={taxPercentage}
                       onChange={(e) => setTaxPercentage(parseFloat(e.target.value) || 0)}
-                      className="w-16 bg-white/10 border-white/20 text-white text-xs py-1 px-2 rounded focus:ring-1 focus:ring-white/30"
+                      className="w-16 bg-white/10 border-white/20 text-white text-xs py-1 px-2 rounded focus:ring-1 focus:ring-white/30 text-center"
                     />
                     <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[10px] opacity-40">%</span>
                   </div>
@@ -947,9 +994,36 @@ export function Billing({
                 <span>{formatCurrency(tax)}</span>
               </div>
             )}
-            <div className="pt-4 border-t border-white/10 flex justify-between text-lg font-bold">
-              <span>Total</span>
-              <span>{formatCurrency(total)}</span>
+
+            <div className="flex justify-between items-center py-2 border-t border-white/5">
+              <span className="opacity-60">Discount</span>
+              <div className="relative">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-white/40 text-xs">₹</span>
+                <input
+                  type="number"
+                  value={discount}
+                  onChange={(e) => setDiscount(e.target.value)}
+                  className="w-24 bg-white/5 border-white/10 text-white text-sm py-1 pl-5 pr-2 rounded text-right"
+                  placeholder="0"
+                />
+              </div>
+            </div>
+
+            {isQuotation && (
+              <div className="flex justify-between items-center py-2 border-t border-white/5">
+                <span className="opacity-60 text-xs uppercase font-bold tracking-wider">Validity Date</span>
+                <input
+                  type="date"
+                  value={validityDate}
+                  onChange={(e) => setValidityDate(e.target.value)}
+                  className="bg-white/5 border-white/10 text-white text-xs py-1 px-2 rounded"
+                />
+              </div>
+            )}
+
+            <div className="pt-4 border-t border-white/20 flex justify-between text-2xl font-black text-indigo-400">
+              <span className="text-white opacity-80 text-lg">Total</span>
+              <span>{formatCurrency(total - (parseFloat(String(discount)) || 0))}</span>
             </div>
             {finalReceivedAmount > 0 && !isQuotation && (
               <div className="flex justify-between text-[10px] uppercase font-bold text-white/40 pt-1">

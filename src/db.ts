@@ -68,6 +68,7 @@ export interface Invoice {
   userId: string;
   customerName: string;
   customerMobile?: string;
+  customerAddress?: string;
   customerGstin?: string;
   isGstInvoice?: boolean;
   stateOfSupply?: string;
@@ -83,8 +84,10 @@ export interface Invoice {
   receivedAmount: number;
   creditAmount: number;
   date: number;
+  validityDate?: number;
   invoiceNumber: string;
   type?: 'invoice' | 'quotation';
+  discount?: number;
   paymentMethod?: 'cash' | 'card' | 'upi' | 'other';
   createdBy?: string;
   staffName?: string;
