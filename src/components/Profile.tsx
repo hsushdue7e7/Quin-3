@@ -13,6 +13,7 @@ import BusinessProfileForm from './BusinessProfileForm';
 import BusinessProfileView from './BusinessProfileView';
 import { ConfirmationModal } from './ConfirmationModal';
 import { useSync } from '../lib/sync';
+import { BackupRestore } from './BackupRestore';
 import { DataImport } from './DataImport';
 import { getProfile, saveProfile, type Profile as ProfileType, getBusinessProfile, getInvoices, getPayments, getExpenses, deleteBusinessData, getStaff, saveStaff, deactivateStaff } from '../lib/firestore';
 import { formatPhone, formatCurrency, cn } from '../lib/utils';
@@ -34,7 +35,7 @@ export function Profile({ user, ownerId, role, onLogout }: {
   const [isEditing, setIsEditing] = useState(false);
   const [isEditingBusiness, setIsEditingBusiness] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [activeView, setActiveView] = useState<'profile' | 'reports' | 'inventory' | 'staff' | 'import'>(isAdmin || role === 'ca' ? 'reports' : 'profile');
+  const [activeView, setActiveView] = useState<'profile' | 'reports' | 'inventory' | 'staff' | 'import' | 'backup'>(isAdmin || role === 'ca' ? 'reports' : 'profile');
   const [error, setError] = useState<string | null>(null);
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [isNavOpen, setIsNavOpen] = useState(false);
@@ -221,6 +222,8 @@ export function Profile({ user, ownerId, role, onLogout }: {
               ? 'Staff Management'
               : activeView === 'import'
               ? 'Import Data'
+              : activeView === 'backup'
+              ? 'Backup & Restore'
               : 'Inventory Settings'}
           </h1>
           <p className="text-slate-500 mt-1 text-sm">
@@ -232,6 +235,8 @@ export function Profile({ user, ownerId, role, onLogout }: {
               ? 'Manage your staff members and their roles.'
               : activeView === 'import'
               ? 'Migrate your data from other apps like Vyapar or MyBillBook.'
+              : activeView === 'backup'
+              ? 'Create and manage local backups of your data.'
               : 'Configure inventory tracking.'}
           </p>
         </div>
@@ -316,6 +321,17 @@ export function Profile({ user, ownerId, role, onLogout }: {
                         <Upload size={18} />
                         Import
                       </button>
+                      <button
+                        onClick={() => { setActiveView('backup'); setIsNavOpen(false); }}
+                        className={`px-4 py-3 text-sm font-bold transition-all flex items-center gap-3 border-t border-slate-100 ${
+                          activeView === 'backup' 
+                            ? 'bg-slate-50 text-indigo-600' 
+                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                        }`}
+                      >
+                        <Database size={18} />
+                        Backup
+                      </button>
                     </>
                   )}
                 </motion.div>
@@ -342,6 +358,15 @@ export function Profile({ user, ownerId, role, onLogout }: {
           </div>
         </div>
       </div>
+
+      {activeView === 'backup' && isAdmin && (
+        <BackupRestore 
+          userId={ownerId} 
+          onRestoreComplete={() => {
+            setActiveView('profile');
+          }} 
+        />
+      )}
 
       {activeView === 'import' && isAdmin && (
         <DataImport 

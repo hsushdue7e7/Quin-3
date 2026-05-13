@@ -298,6 +298,7 @@ export class QuinDatabase extends Dexie {
   users!: Table<User>;
   profile!: Table<Profile>;
   expenses!: Table<Expense>;
+  backups!: Table<BackupRecord>;
 
   constructor() {
     super('QuinDB');
@@ -320,7 +321,21 @@ export class QuinDatabase extends Dexie {
     this.version(6).stores({
       expenses: '++id, userId, category, date'
     });
+    this.version(7).stores({
+      backups: '++id, userId, date'
+    });
   }
+}
+
+export interface BackupRecord {
+  id?: number;
+  userId: string;
+  date: number;
+  data: Uint8Array; // Compressed data
+  filename: string;
+  size: number;
+  recordCount: number;
+  type: 'auto' | 'manual';
 }
 
 export const db = new QuinDatabase();

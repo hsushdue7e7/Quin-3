@@ -104,6 +104,8 @@ export default function App() {
   );
 }
 
+import { checkAndRunAutoBackup } from './lib/backup';
+
 function AppContent() {
   const [appMode, setAppMode] = useState<'quin' | 'b2b'>('quin');
   const [showPaymentModalFromDashboard, setShowPaymentModalFromDashboard] = useState(false);
@@ -122,6 +124,13 @@ function AppContent() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const unreadCount = notifications.filter(n => !n.isRead).length;
+
+  // Auto-backup effect
+  useEffect(() => {
+    if (ownerId && !isInactive) {
+      checkAndRunAutoBackup(ownerId);
+    }
+  }, [ownerId, isInactive]);
 
   useEffect(() => {
     console.log('App initialization effect running');

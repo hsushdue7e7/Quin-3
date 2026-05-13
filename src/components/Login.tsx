@@ -61,19 +61,21 @@ export function Login() {
     setLoading(true);
 
     try {
-      if (isMobileDevice()) {
-        // More reliable for APKs/Mobile Chrome to avoid popup blocking
-        setIsRedirecting(true);
-        await signInWithRedirect(auth, googleProvider);
-      } else {
-        // Better for desktop
-        const result = await signInWithPopup(auth, googleProvider);
-        await setupUserProfile(result.user);
-      }
+      // Use Popup for all environments. Redirect is prone to 'missing initial state' 
+      // in APK/WebView environments due to storage partitioning.
+      const result = await signInWithPopup(auth, googleProvider);
+      await setupUserProfile(result.user);
     } catch (err: any) {
-      if (err.code !== 'auth/popup-closed-by-user') {
+      console.error("Login Error:", err);
+      
+      if (err.code === 'auth/popup-blocked') {
+        setError('Popup blocked by browser. Please enable popups for this site.');
+      } else if (err.code === 'auth/operation-not-supported-in-this-environment') {
+        setError('Google Login is restricted in this specific viewer. Please open in Chrome or a standard browser.');
+      } else if (err.code !== 'auth/popup-closed-by-user') {
         setError(err.message || 'Failed to sign in with Google');
       }
+    } finally {
       setLoading(false);
       setIsRedirecting(false);
     }
