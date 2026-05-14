@@ -1,5 +1,5 @@
 import { useState, useEffect, Suspense, lazy } from 'react';
-import { LayoutDashboard, Package, Receipt, BarChart3, User, LogOut, Settings, Menu, X, History, Cloud, Bot, AlertTriangle, Bell, Check, Users } from 'lucide-react';
+import { LayoutDashboard, Package, Receipt, BarChart3, User, LogOut, Settings, Menu, X, History, Cloud, Bot, AlertTriangle, Bell, Check, Users, Maximize, Minimize } from 'lucide-react';
 
 // Lazy load components
 const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
@@ -123,7 +123,28 @@ function AppContent() {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const unreadCount = notifications.filter(n => !n.isRead).length;
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  };
 
   // Auto-backup effect
   useEffect(() => {
@@ -632,13 +653,13 @@ function AppContent() {
           </div>
           )}
 
-          {/* Profile / Logout Dropdown Trigger */}
+          {/* Fullscreen Toggle */}
           <button 
-            onClick={handleLogout}
-            title="Sign Out"
-            className="p-1.5 bg-slate-100 hover:bg-slate-200 hover:text-rose-600 rounded-lg text-slate-600 transition-colors"
+            onClick={toggleFullscreen}
+            title={isFullscreen ? "Exit Full Screen" : "Enter Full Screen"}
+            className="p-1.5 bg-slate-100 hover:bg-slate-200 hover:text-indigo-600 rounded-lg text-slate-600 transition-colors"
           >
-            <LogOut size={18} />
+            {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
           </button>
         </div>
       </header>
