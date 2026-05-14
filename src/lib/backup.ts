@@ -57,7 +57,7 @@ export async function restoreFromBackup(backupId: number, userId: string) {
   const tables = Object.keys(data.tables);
   
   // Transactional import (as much as possible)
-  await db.transaction('rw', db.products, db.invoices, db.payments, db.profile, db.expenses, async () => {
+  await db.transaction('rw', [db.products, db.invoices, db.payments, db.profile, db.expenses], async () => {
     for (const table of tables) {
       if ((db as any)[table]) {
         // Delete existing for this user
@@ -146,7 +146,7 @@ export async function importFromFile(file: File, userId: string): Promise<Backup
           data: compressed,
           filename: file.name,
           size: compressed.length,
-          recordCount: Object.values(data.tables).reduce((acc: number, t: any) => acc + t.length, 0),
+          recordCount: (Object.values(data.tables) as any[]).reduce((acc: number, t: any) => acc + t.length, 0),
           type: 'manual'
         };
 
@@ -184,7 +184,7 @@ export async function importDatabase(userId: string, jsonString: string) {
   if (!data.tables) throw new Error('Invalid database format');
 
   const tables = Object.keys(data.tables);
-  await db.transaction('rw', db.products, db.invoices, db.payments, db.profile, db.expenses, async () => {
+  await db.transaction('rw', [db.products, db.invoices, db.payments, db.profile, db.expenses], async () => {
     for (const table of tables) {
       if ((db as any)[table]) {
         const existingIds = await (db as any)[table].where('userId').equals(userId).primaryKeys();

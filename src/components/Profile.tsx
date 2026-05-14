@@ -15,6 +15,51 @@ import { ConfirmationModal } from './ConfirmationModal';
 import { useSync } from '../lib/sync';
 import { BackupRestore } from './BackupRestore';
 import { DataImport } from './DataImport';
+import { Maximize, Minimize } from 'lucide-react';
+
+export function FullscreenToggle() {
+  const [isFullscreen, setIsFullscreen] = React.useState(false);
+
+  React.useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch((err) => {
+        console.error(`Error attempting to enable fullscreen: ${err.message}`);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  };
+
+  return (
+    <button
+      onClick={toggleFullscreen}
+      className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all border-t border-slate-100"
+    >
+      {isFullscreen ? (
+        <>
+          <Minimize size={18} />
+          Exit Full Screen
+        </>
+      ) : (
+        <>
+          <Maximize size={18} />
+          Enter Full Screen
+        </>
+      )}
+    </button>
+  );
+}
+
 import { getProfile, saveProfile, type Profile as ProfileType, getBusinessProfile, getInvoices, getPayments, getExpenses, deleteBusinessData, getStaff, saveStaff, deactivateStaff } from '../lib/firestore';
 import { formatPhone, formatCurrency, cn } from '../lib/utils';
 import { db as localDb, type BusinessProfile, type Invoice, type Product, type Payment, type Expense, type Staff, UserRole } from '../db';
@@ -35,7 +80,7 @@ export function Profile({ user, ownerId, role, onLogout }: {
   const [isEditing, setIsEditing] = useState(false);
   const [isEditingBusiness, setIsEditingBusiness] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [activeView, setActiveView] = useState<'profile' | 'reports' | 'inventory' | 'staff' | 'import' | 'backup'>(isAdmin || role === 'ca' ? 'reports' : 'profile');
+  const [activeView, setActiveView] = useState<'profile' | 'reports' | 'inventory' | 'staff' | 'import' | 'backup' | 'preferences' | 'danger'>(isAdmin || role === 'ca' ? 'reports' : 'profile');
   const [error, setError] = useState<string | null>(null);
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [isNavOpen, setIsNavOpen] = useState(false);
@@ -224,6 +269,10 @@ export function Profile({ user, ownerId, role, onLogout }: {
               ? 'Import Data'
               : activeView === 'backup'
               ? 'Backup & Restore'
+              : activeView === 'preferences'
+              ? 'Business Preferences'
+              : activeView === 'danger'
+              ? 'Danger Zone'
               : 'Inventory Settings'}
           </h1>
           <p className="text-slate-500 mt-1 text-sm">
@@ -237,6 +286,10 @@ export function Profile({ user, ownerId, role, onLogout }: {
               ? 'Migrate your data from other apps like Vyapar or MyBillBook.'
               : activeView === 'backup'
               ? 'Create and manage local backups of your data.'
+              : activeView === 'preferences'
+              ? 'Configure app settings, taxes, and inventory behavior.'
+              : activeView === 'danger'
+              ? 'Irreversible account and data actions.'
               : 'Configure inventory tracking.'}
           </p>
         </div>
@@ -256,20 +309,33 @@ export function Profile({ user, ownerId, role, onLogout }: {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
                   transition={{ duration: 0.2 }}
-                  className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden flex flex-col"
+                  className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden flex flex-col z-[100]"
                 >
                   {isAdmin && (
-                    <button
-                      onClick={() => { setActiveView('profile'); setIsNavOpen(false); }}
-                      className={`px-4 py-3 text-sm font-bold transition-all flex items-center gap-3 ${
-                        activeView === 'profile' 
-                          ? 'bg-slate-50 text-indigo-600' 
-                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                      }`}
-                    >
-                      <User size={18} />
-                      Business
-                    </button>
+                    <>
+                      <button
+                        onClick={() => { setActiveView('profile'); setIsNavOpen(false); }}
+                        className={`px-4 py-3 text-sm font-bold transition-all flex items-center gap-3 ${
+                          activeView === 'profile' 
+                            ? 'bg-slate-50 text-indigo-600' 
+                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                        }`}
+                      >
+                        <User size={18} />
+                        Business Profile
+                      </button>
+                      <button
+                        onClick={() => { 
+                          setActiveView('profile'); 
+                          setIsEditing(true);
+                          setIsNavOpen(false); 
+                        }}
+                        className="px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all flex items-center gap-3 border-t border-slate-100"
+                      >
+                        <Edit3 size={18} />
+                        Edit Profile
+                      </button>
+                    </>
                   )}
                   {!isAdmin && (
                     <button
@@ -308,7 +374,18 @@ export function Profile({ user, ownerId, role, onLogout }: {
                         }`}
                       >
                         <Users size={18} />
-                        Staff
+                        Staff Management
+                      </button>
+                      <button
+                        onClick={() => { setActiveView('preferences'); setIsNavOpen(false); }}
+                        className={`px-4 py-3 text-sm font-bold transition-all flex items-center gap-3 border-t border-slate-100 ${
+                          activeView === 'preferences' 
+                            ? 'bg-slate-50 text-indigo-600' 
+                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                        }`}
+                      >
+                        <Settings size={18} />
+                        Preferences
                       </button>
                       <button
                         onClick={() => { setActiveView('import'); setIsNavOpen(false); }}
@@ -319,7 +396,7 @@ export function Profile({ user, ownerId, role, onLogout }: {
                         }`}
                       >
                         <Upload size={18} />
-                        Import
+                        Import Data
                       </button>
                       <button
                         onClick={() => { setActiveView('backup'); setIsNavOpen(false); }}
@@ -330,31 +407,35 @@ export function Profile({ user, ownerId, role, onLogout }: {
                         }`}
                       >
                         <Database size={18} />
-                        Backup
+                        Backup & Restore
                       </button>
+                      <button
+                        onClick={() => { setActiveView('danger'); setIsNavOpen(false); }}
+                        className={`px-4 py-3 text-sm font-bold transition-all flex items-center gap-3 border-t border-slate-100 ${
+                          activeView === 'danger' 
+                            ? 'bg-slate-50 text-rose-600' 
+                            : 'text-rose-600 hover:bg-rose-50'
+                        }`}
+                      >
+                        <Trash2 size={18} />
+                        Danger Zone
+                      </button>
+                      <FullscreenToggle />
                     </>
                   )}
+                  <button
+                    onClick={() => {
+                      onLogout();
+                      setIsNavOpen(false);
+                    }}
+                    className="px-4 py-3 text-sm font-bold text-red-600 hover:bg-red-50 transition-all flex items-center gap-3 border-t border-slate-100"
+                  >
+                    <LogOut size={18} />
+                    Log Out
+                  </button>
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
-          <div className="flex items-center">
-            {activeView === 'profile' && !isEditing && isAdmin && (
-              <button
-                onClick={() => setIsEditing(true)}
-                className="px-4 py-2 rounded-lg text-sm font-bold text-slate-900 hover:bg-slate-50 transition-all flex items-center gap-2"
-              >
-                <Edit3 size={18} />
-                Edit Profile
-              </button>
-            )}
-            <button
-              onClick={onLogout}
-              className="px-4 py-2 rounded-lg text-sm font-bold text-red-600 hover:bg-red-50 transition-all flex items-center gap-2"
-            >
-              <LogOut size={18} />
-              Log Out
-            </button>
           </div>
         </div>
       </div>
@@ -491,8 +572,8 @@ export function Profile({ user, ownerId, role, onLogout }: {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 space-y-8">
+          <div className="grid grid-cols-1 gap-8">
+            <div className="space-y-8">
               {/* SECTION 3: Business Details */}
               <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
                 <div className="p-6 md:p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50">
@@ -693,184 +774,6 @@ export function Profile({ user, ownerId, role, onLogout }: {
                 )}
               </div>
             </div>
-
-            <div className="space-y-8">
-              {/* SECTION 4: Business Settings */}
-              <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-slate-100 bg-slate-50">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2.5 bg-white shadow-sm rounded-xl text-slate-700">
-                      <Settings size={20} />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-slate-900 text-lg leading-none mb-1">Preferences</h3>
-                      <p className="text-xs text-slate-500 font-medium">App settings & customization</p>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="divide-y divide-slate-100">
-                  {/* Setting 1: Tax */}
-                  <div className="p-6 space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div className="space-y-0.5">
-                        <h4 className="font-bold text-slate-900 text-sm">Default Tax (GST)</h4>
-                        <p className="text-xs text-slate-500 leading-tight">Applied automatically to new invoices</p>
-                      </div>
-                      <div className="flex items-center gap-1 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 focus-within:ring-2 focus-within:ring-indigo-600 focus-within:bg-white transition-all shrink-0">
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.1"
-                          defaultValue={profile?.taxPercentage ?? 10}
-                          className="w-10 bg-transparent font-black text-slate-900 text-right outline-none text-sm"
-                          onBlur={async (e) => {
-                            const newTax = parseFloat(e.target.value);
-                            if (!isNaN(newTax) && newTax !== profile?.taxPercentage) {
-                              const updatedProfile = profile 
-                                ? { ...profile, taxPercentage: newTax }
-                                : { userId: ownerId, businessName: '', ownerName: '', email: '', phone: '', address: '', taxPercentage: newTax, trackInventory: true };
-                              await handleSaveProfile(updatedProfile);
-                              setProfile(updatedProfile);
-                              setShowSuccess(true);
-                              setTimeout(() => setShowSuccess(false), 3000);
-                            }
-                          }}
-                        />
-                        <span className="font-black text-slate-500 text-sm">%</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Setting 2: Inventory Tracking */}
-                  <div className="p-6 space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div className="space-y-0.5">
-                        <h4 className="font-bold text-slate-900 text-sm">Inventory Tracking</h4>
-                        <p className="text-xs text-slate-500 leading-tight">Deduct stock automatically</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                        <input 
-                          type="checkbox" 
-                          checked={profile?.trackInventory ?? true}
-                          onChange={async (e) => {
-                            const newValue = e.target.checked;
-                            const updatedProfile = profile 
-                              ? { ...profile, trackInventory: newValue }
-                              : { userId: ownerId, businessName: '', ownerName: '', email: '', phone: '', address: '', taxPercentage: 10, trackInventory: newValue };
-                            await handleSaveProfile(updatedProfile);
-                            setProfile(updatedProfile);
-                            setShowSuccess(true);
-                            setTimeout(() => setShowSuccess(false), 3000);
-                          }}
-                          className="sr-only peer" 
-                        />
-                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Setting 3: Currency */}
-                  <div className="p-6 space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div className="space-y-0.5">
-                        <h4 className="font-bold text-slate-900 text-sm">Currency</h4>
-                        <p className="text-xs text-slate-500 leading-tight">Default accounting currency</p>
-                      </div>
-                      <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 shrink-0">
-                        <IndianRupee size={14} className="text-slate-500" />
-                        <span className="font-bold text-slate-900 text-sm">INR</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Setting 4: Invoice Theme */}
-                  <div className="p-6 space-y-3">
-                    <div className="flex flex-col gap-3">
-                      <div className="flex items-start justify-between">
-                        <div className="space-y-0.5">
-                          <h4 className="font-bold text-slate-900 text-sm">Invoice Layout</h4>
-                          <p className="text-xs text-slate-500 leading-tight">Print & PDF template</p>
-                        </div>
-                        <button 
-                          onClick={() => setShowThemePicker(!showThemePicker)}
-                          className="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-all border border-indigo-100 shrink-0"
-                        >
-                          {profile?.invoiceTheme || 'modern'}
-                        </button>
-                      </div>
-                      
-                      <AnimatePresence>
-                        {showThemePicker && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="overflow-hidden"
-                          >
-                            <div className="grid grid-cols-2 gap-2 mt-2">
-                              {(['modern', 'classic', 'minimal', 'bold', 'elegant'] as const).map((t) => (
-                                <button
-                                  key={t}
-                                  onClick={async () => {
-                                    const updatedProfile = profile 
-                                      ? { ...profile, invoiceTheme: t }
-                                      : { userId: ownerId, businessName: '', ownerName: '', email: '', phone: '', address: '', taxPercentage: 10, trackInventory: true, invoiceTheme: t };
-                                    await handleSaveProfile(updatedProfile);
-                                    setProfile(updatedProfile);
-                                    setShowSuccess(true);
-                                    setTimeout(() => setShowSuccess(false), 3000);
-                                  }}
-                                  className={cn(
-                                    "py-2 px-3 rounded-lg text-xs font-bold capitalize transition-all border outline-none",
-                                    (profile?.invoiceTheme || 'modern') === t 
-                                      ? "bg-slate-900 text-white border-slate-900 shadow-sm ring-2 ring-slate-900/20 ring-offset-1" 
-                                      : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
-                                  )}
-                                >
-                                  {t}
-                                </button>
-                              ))}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* SECTION 7: Actions */}
-              <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-rose-200 shadow-sm space-y-4">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2.5 bg-rose-50 rounded-xl text-rose-600">
-                    <AlertCircle size={20} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-lg leading-none mb-1">Danger Zone</h3>
-                    <p className="text-xs text-rose-600/80 font-medium">Irreversible actions</p>
-                  </div>
-                </div>
-                
-                <div className="space-y-3">
-                  <button
-                    onClick={onLogout}
-                    className="w-full py-3 bg-slate-50 text-slate-700 rounded-xl font-bold hover:bg-slate-100 transition-all flex items-center justify-center gap-2 border border-slate-200 group"
-                  >
-                    <LogOut size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
-                    Logout from Device
-                  </button>
-                  <button
-                    onClick={handleDeleteBusiness}
-                    className="w-full py-3 bg-rose-50 text-rose-700 rounded-xl font-bold hover:bg-rose-100 transition-all flex items-center justify-center gap-2 border border-rose-100 group"
-                  >
-                    <Trash2 size={18} className="text-rose-500 group-hover:animate-bounce" />
-                    Delete Business Data
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
         ) : (
@@ -881,6 +784,201 @@ export function Profile({ user, ownerId, role, onLogout }: {
             onLogout={onLogout} 
           />
         )
+      ) : activeView === 'preferences' && isAdmin ? (
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-slate-100 bg-slate-50">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-white shadow-sm rounded-xl text-slate-700">
+                  <Settings size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-lg leading-none mb-1">Preferences</h3>
+                  <p className="text-xs text-slate-500 font-medium">App settings & customization</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="divide-y divide-slate-100">
+              {/* Setting 1: Tax */}
+              <div className="p-6 space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-0.5">
+                    <h4 className="font-bold text-slate-900 text-sm">Default Tax (GST)</h4>
+                    <p className="text-xs text-slate-500 leading-tight">Applied automatically to new invoices</p>
+                  </div>
+                  <div className="flex items-center gap-1 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 focus-within:ring-2 focus-within:ring-indigo-600 focus-within:bg-white transition-all shrink-0">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      defaultValue={profile?.taxPercentage ?? 10}
+                      className="w-10 bg-transparent font-black text-slate-900 text-right outline-none text-sm"
+                      onBlur={async (e) => {
+                        const newTax = parseFloat(e.target.value);
+                        if (!isNaN(newTax) && newTax !== profile?.taxPercentage) {
+                          const updatedProfile = profile 
+                            ? { ...profile, taxPercentage: newTax }
+                            : { userId: ownerId, businessName: '', ownerName: '', email: '', phone: '', address: '', taxPercentage: newTax, trackInventory: true };
+                          await handleSaveProfile(updatedProfile);
+                          setProfile(updatedProfile);
+                          setShowSuccess(true);
+                          setTimeout(() => setShowSuccess(false), 3000);
+                        }
+                      }}
+                    />
+                    <span className="font-black text-slate-500 text-sm">%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Setting 2: Inventory Tracking */}
+              <div className="p-6 space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-0.5">
+                    <h4 className="font-bold text-slate-900 text-sm">Inventory Tracking</h4>
+                    <p className="text-xs text-slate-500 leading-tight">Deduct stock automatically</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input 
+                      type="checkbox" 
+                      checked={profile?.trackInventory ?? true}
+                      onChange={async (e) => {
+                        const newValue = e.target.checked;
+                        const updatedProfile = profile 
+                          ? { ...profile, trackInventory: newValue }
+                          : { userId: ownerId, businessName: '', ownerName: '', email: '', phone: '', address: '', taxPercentage: 10, trackInventory: newValue };
+                        await handleSaveProfile(updatedProfile);
+                        setProfile(updatedProfile);
+                        setShowSuccess(true);
+                        setTimeout(() => setShowSuccess(false), 3000);
+                      }}
+                      className="sr-only peer" 
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Setting 3: Currency */}
+              <div className="p-6 space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-0.5">
+                    <h4 className="font-bold text-slate-900 text-sm">Currency</h4>
+                    <p className="text-xs text-slate-500 leading-tight">Default accounting currency</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 shrink-0">
+                    <IndianRupee size={14} className="text-slate-500" />
+                    <span className="font-bold text-slate-900 text-sm">INR</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Setting 4: Invoice Theme */}
+              <div className="p-6 space-y-3">
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-0.5">
+                      <h4 className="font-bold text-slate-900 text-sm">Invoice Layout</h4>
+                      <p className="text-xs text-slate-500 leading-tight">Print & PDF template</p>
+                    </div>
+                    <button 
+                      onClick={() => setShowThemePicker(!showThemePicker)}
+                      className="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-all border border-indigo-100 shrink-0"
+                    >
+                      {profile?.invoiceTheme || 'modern'}
+                    </button>
+                  </div>
+                  
+                  <AnimatePresence>
+                    {showThemePicker && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="grid grid-cols-2 gap-2 mt-2">
+                          {(['modern', 'classic', 'minimal', 'bold', 'elegant'] as const).map((t) => (
+                            <button
+                              key={t}
+                              onClick={async () => {
+                                const updatedProfile = profile 
+                                  ? { ...profile, invoiceTheme: t }
+                                  : { userId: ownerId, businessName: '', ownerName: '', email: '', phone: '', address: '', taxPercentage: 10, trackInventory: true, invoiceTheme: t };
+                                await handleSaveProfile(updatedProfile);
+                                setProfile(updatedProfile);
+                                setShowSuccess(true);
+                                setTimeout(() => setShowSuccess(false), 3000);
+                              }}
+                              className={cn(
+                                "py-2 px-3 rounded-lg text-xs font-bold capitalize transition-all border outline-none",
+                                (profile?.invoiceTheme || 'modern') === t 
+                                  ? "bg-slate-900 text-white border-slate-900 shadow-sm ring-2 ring-slate-900/20 ring-offset-1" 
+                                  : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                              )}
+                            >
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : activeView === 'danger' && isAdmin ? (
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-rose-200 shadow-sm space-y-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2.5 bg-rose-50 rounded-xl text-rose-600">
+                <AlertCircle size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-lg leading-none mb-1">Danger Zone</h3>
+                <p className="text-xs text-rose-600/80 font-medium">Irreversible actions</p>
+              </div>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="p-4 bg-rose-50/50 rounded-2xl border border-rose-100 flex items-start gap-4">
+                <Trash2 size={24} className="text-rose-500 shrink-0 mt-1" />
+                <div className="space-y-1">
+                  <h4 className="font-bold text-rose-900">Delete All Business Data</h4>
+                  <p className="text-xs text-rose-700 leading-relaxed">
+                    This will permanently remove all your invoices, products, customer records, and inventory data. 
+                  </p>
+                  <button
+                    onClick={handleDeleteBusiness}
+                    className="mt-3 px-6 py-2.5 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-700 transition-all flex items-center gap-2 shadow-lg shadow-rose-100 active:scale-95"
+                  >
+                    Delete Data Permanently
+                  </button>
+                </div>
+              </div>
+              
+              <div className="p-4 bg-slate-50/50 rounded-2xl border border-slate-200 flex items-start gap-4">
+                <LogOut size={24} className="text-slate-400 shrink-0 mt-1" />
+                <div className="space-y-1">
+                  <h4 className="font-bold text-slate-900">Logout Everywhere</h4>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Clear your session on this device and return to the login screen.
+                  </p>
+                  <button
+                    onClick={onLogout}
+                    className="mt-3 px-6 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-all flex items-center gap-2 active:scale-95 shadow-sm"
+                  >
+                    Logout from Device
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       ) : activeView === 'reports' ? (
         <Reports user={user} ownerId={ownerId} />
       ) : activeView === 'staff' ? (

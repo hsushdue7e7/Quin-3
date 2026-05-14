@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, AlertCircle, CheckCircle2, ShoppingBag, TrendingUp, MessageSquare, X, Receipt, Mic, MicOff, Volume2, Trash2 } from 'lucide-react';
-import { GoogleGenAI, Modality } from "@google/genai";
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { db } from '../lib/firebase';
@@ -12,6 +11,7 @@ interface Message {
   content: string;
   data?: any;
   audio?: string; // Base64 audio data
+  mimeType?: string;
 }
 
 export function BusinessAssistant({ 
@@ -95,35 +95,40 @@ export function BusinessAssistant({
     }
   };
 
-  const playAudio = (base64Data: string) => {
-    if (audioRef.current) {
-      audioRef.current.pause();
+  const playAudio = (base64Data: string, mimeType: string = 'audio/mp3') => {
+    if (!base64Data) return;
+    try {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      const audio = new Audio(`data:${mimeType};base64,${base64Data}`);
+      audioRef.current = audio;
+      setIsSpeaking(true);
+      audio.play().catch(err => {
+        console.warn("Audio playback failed:", err);
+        setIsSpeaking(false);
+      });
+      audio.onended = () => setIsSpeaking(false);
+      audio.onerror = () => {
+        console.error("Audio error occurred");
+        setIsSpeaking(false);
+      };
+    } catch (error) {
+      console.error("Error playing audio:", error);
+      setIsSpeaking(false);
     }
-    const audio = new Audio(`data:audio/mp3;base64,${base64Data}`);
-    audioRef.current = audio;
-    setIsSpeaking(true);
-    audio.play();
-    audio.onended = () => setIsSpeaking(false);
   };
 
   const generateSpeech = async (text: string) => {
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
-        contents: [{ parts: [{ text: `Say in a friendly Indian shopkeeper tone: ${text}` }] }],
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: 'Kore' }, // Kore is a good voice
-            },
-          },
-        },
+      const response = await fetch('/api/assistant/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
       });
-
-      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      return base64Audio;
+      if (!response.ok) throw new Error('TTS failed');
+      const data = await response.json();
+      return { audio: data.audio, mimeType: data.mimeType };
     } catch (error) {
       console.error("TTS Error:", error);
       return null;
@@ -139,16 +144,11 @@ export function BusinessAssistant({
     setIsLoading(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-      const model = ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: userMessage }]
-          }
-        ],
-        config: {
+      const response = await fetch('/api/assistant/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: userMessage,
           systemInstruction: `You are a smart business assistant for small shopkeepers in India.
 Your job is to help manage inventory, billing, and udhaar (credit).
 
@@ -184,21 +184,20 @@ Rules:
 5. If the user mentions udhaar or credit recovery, suggest a polite but firm WhatsApp reminder message.
 6. Always focus on saving time and increasing profit.
 7. Avoid long explanations. Keep responses practical and short.
-8. If extracting a product or sale, also provide a short confirmation text in Hinglish.`,
-          responseMimeType: "application/json"
-        }
+8. If extracting a product or sale, also provide a short confirmation text in Hinglish.`
+        })
       });
 
-      const result = await model;
-      const responseText = result.text;
+      if (!response.ok) throw new Error('Chat failed');
+      const data = await response.json();
+      const responseText = data.text;
       
       try {
         const parsed = JSON.parse(responseText);
         let assistantContent = "";
-        let audioData = undefined;
         
         if (parsed.type === 'product_extraction') {
-          const { data, missing_fields } = parsed;
+          const { missing_fields } = parsed;
           assistantContent = `Theek hai! Maine product details nikaal liye hain.`;
           if (missing_fields && missing_fields.length > 0) {
             assistantContent += `\nKuch details missing hain: ${missing_fields.join(', ')}. Maine default values suggest kiye hain.`;
@@ -210,20 +209,26 @@ Rules:
         }
 
         // Generate speech for the assistant's response
-        audioData = await generateSpeech(assistantContent);
-        if (audioData) playAudio(audioData);
+        const speech = await generateSpeech(assistantContent);
+        if (speech?.audio) playAudio(speech.audio, speech.mimeType);
 
         setMessages(prev => [...prev, { 
           role: 'assistant', 
           content: assistantContent,
           data: parsed,
-          audio: audioData
+          audio: speech?.audio,
+          mimeType: speech?.mimeType
         }]);
 
       } catch (e) {
-        const audioData = await generateSpeech(responseText);
-        if (audioData) playAudio(audioData);
-        setMessages(prev => [...prev, { role: 'assistant', content: responseText, audio: audioData }]);
+        const speech = await generateSpeech(responseText);
+        if (speech?.audio) playAudio(speech.audio, speech.mimeType);
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: responseText, 
+          audio: speech?.audio,
+          mimeType: speech?.mimeType
+        }]);
       }
 
     } catch (error) {
@@ -332,7 +337,7 @@ Rules:
                 
                 {msg.role === 'assistant' && msg.audio && (
                   <button 
-                    onClick={() => playAudio(msg.audio!)}
+                    onClick={() => playAudio(msg.audio!, msg.mimeType)}
                     className="absolute -right-10 top-0 p-2 bg-white border border-slate-200 rounded-full text-slate-400 hover:text-slate-900 opacity-0 group-hover:opacity-100 transition-all shadow-sm"
                   >
                     <Volume2 size={14} />

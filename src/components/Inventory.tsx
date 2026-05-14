@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { type Product, UserRole } from '../db';
-import { Plus, Search, Edit2, Trash2, AlertTriangle, Package, Database, Sparkles, Loader2, Camera, X } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, AlertTriangle, Package, Database, Sparkles, Loader2 } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 import { db } from '../lib/firebase';
 import { collection, query, where, getDocs, doc, writeBatch, getDoc } from 'firebase/firestore';
-import { GoogleGenAI, Type } from "@google/genai";
-import { uploadImage, saveInventoryProduct, deleteInventoryProduct, withTimeout } from '../lib/firestore';
+import { saveInventoryProduct, deleteInventoryProduct, withTimeout } from '../lib/firestore';
 import { PRODUCT_CATEGORIES } from '../constants/categories';
+import { ProductForm } from './ProductForm';
 
 export function Inventory({ user, ownerId, role }: { user: FirebaseUser; ownerId: string; role: UserRole | null }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -15,7 +15,6 @@ export function Inventory({ user, ownerId, role }: { user: FirebaseUser; ownerId
   const [searchTerm, setSearchTerm] = useState('');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [pendingAction, setPendingAction] = useState<{ type: 'add' | 'edit' | 'delete' | 'bulk_update', product?: Product }>({ type: 'add' });
   const [sortBy, setSortBy] = useState<'recent' | 'oldest' | 'name'>('recent');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterLowStock, setFilterLowStock] = useState(false);
@@ -29,134 +28,41 @@ export function Inventory({ user, ownerId, role }: { user: FirebaseUser; ownerId
   const [isAILoading, setIsAILoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-
-  const [isUploading, setIsUploading] = useState(false);
-
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []) as File[];
-    if (files.length === 0) return;
-
-    const MAX_SIZE = 5 * 1024 * 1024; // 5MB
-    const validFiles = files.filter(file => {
-      if (file.size > MAX_SIZE) {
-        setSaveError(`Image ${file.name} is too large. Max size is 5MB.`);
-        return false;
-      }
-      return true;
-    });
-
-    if (validFiles.length === 0) return;
-
-    setIsUploading(true);
-    setSaveError(null);
-
-    try {
-      const uploadedUrls: string[] = [];
-      for (const file of validFiles) {
-        console.log(`Uploading inventory image: ${file.name}`);
-        const url = await uploadImage(file, `inventory/${ownerId}`);
-        uploadedUrls.push(url);
-      }
-
-      setEditingProduct(prev => {
-        if (!prev) return null;
-        const currentUrls = prev.imageUrls || (prev.imageUrl ? [prev.imageUrl] : []);
-        const newUrls = [...currentUrls, ...uploadedUrls];
-        return {
-          ...prev,
-          imageUrl: newUrls[0] || '',
-          imageUrls: newUrls
-        };
-      });
-
-      // If we're editing an existing product, update Firestore immediately
-      if (editingProduct?.id) {
-        const currentUrls = editingProduct.imageUrls || (editingProduct.imageUrl ? [editingProduct.imageUrl] : []);
-        const newUrls = [...currentUrls, ...uploadedUrls];
-        
-        await saveInventoryProduct({
-          ...editingProduct,
-          imageUrl: newUrls[0],
-          imageUrls: newUrls,
-          updatedAt: Date.now()
-        });
-        
-        // Refresh products list
-        const q = query(collection(db, 'products'), where('userId', '==', ownerId));
-        const snapshot = await getDocs(q);
-        setProducts(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Product)));
-      }
-    } catch (error) {
-      console.error('Error uploading images:', error);
-      setSaveError('Failed to upload images. Please try again.');
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const removeImage = async (index: number) => {
-    setEditingProduct(prev => {
-      if (!prev) return null;
-      const newUrls = (prev.imageUrls || []).filter((_, i) => i !== index);
-      const updatedProduct = { ...prev, imageUrls: newUrls, imageUrl: newUrls[0] || '' };
-      
-      // If editing existing, sync to Firestore
-      if (prev.id) {
-        saveInventoryProduct({
-          ...updatedProduct,
-          updatedAt: Date.now()
-        }).then(async () => {
-          const q = query(collection(db, 'products'), where('userId', '==', ownerId));
-          const snapshot = await getDocs(q);
-          setProducts(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Product)));
-        });
-      }
-      
-      return updatedProduct;
-    });
-  };
 
   const handleAIQuickAdd = async () => {
     if (!aiInput.trim()) return;
     setIsAILoading(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Extract product details from this description: "${aiInput}". 
-        If some details are missing, use reasonable defaults. 
-        Generate a unique SKU based on the name if not provided.
-        Current date: ${new Date().toISOString()}`,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING, description: "Product or service name" },
-                type: { type: Type.STRING, enum: ["product", "service"], description: "Whether this is a physical product or a service" },
-                sku: { type: Type.STRING, description: "Unique SKU or Service Code" },
-                hsnCode: { type: Type.STRING, description: "HSN Code for products or SAC Code for services" },
-                gstRate: { type: Type.NUMBER, description: "GST Rate (e.g., 5, 12, 18, 28)" },
-                category: { type: Type.STRING, description: "Product category" },
-                costPrice: { type: Type.NUMBER, description: "Cost price" },
-                price: { type: Type.NUMBER, description: "Selling price" },
-                stock: { type: Type.NUMBER, description: "Initial stock quantity" },
-                primaryUnit: { type: Type.STRING, description: "Primary unit (e.g., Pcs, Box)" },
-                minStock: { type: Type.NUMBER, description: "Low stock alert level" },
-                trackInventory: { type: Type.BOOLEAN, description: "Whether to track inventory" }
-              },
-              required: ["name", "sku", "category", "costPrice", "price", "stock", "primaryUnit", "minStock", "trackInventory"]
-            }
-          }
-        }
+      const response = await fetch('/api/assistant/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: aiInput,
+          systemInstruction: `Extract product details from the description.
+If some details are missing, use reasonable defaults.
+Generate a unique SKU based on the name if not provided.
+Return an ARRAY of objects with these properties:
+{
+  "name": "string",
+  "type": "product" | "service",
+  "sku": "string",
+  "hsnCode": "string",
+  "gstRate": number,
+  "category": "string",
+  "costPrice": number,
+  "price": number,
+  "stock": number,
+  "primaryUnit": "string",
+  "minStock": number,
+  "trackInventory": boolean
+}`
+        })
       });
 
-      const productsData = JSON.parse(response.text);
+      if (!response.ok) throw new Error('AI extraction failed');
+      const data = await response.json();
+      const productsData = JSON.parse(data.text);
       
       // Add all products to the database
       const batch = writeBatch(db);
@@ -201,6 +107,7 @@ export function Inventory({ user, ownerId, role }: { user: FirebaseUser; ownerId
     fetchData();
   }, [ownerId]);
 
+  const isGlobalInventoryEnabled = profile?.trackInventory !== false;
   const categories = Array.from(new Set(products?.map(p => p.category) || [])).sort();
 
   const filteredProducts = products?.filter(p => {
@@ -229,120 +136,34 @@ export function Inventory({ user, ownerId, role }: { user: FirebaseUser; ownerId
     );
   };
 
-  const [skuValue, setSkuValue] = useState('');
-
-  const generateSKU = (name: string) => {
-    return name
-      .trim()
-      .split(/\s+/)
-      .map(word => word.slice(0, 3).toUpperCase())
-      .join('-')
-      .replace(/[^A-Z0-9-]/g, '');
-  };
-
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!editingProduct) {
-      setSkuValue(generateSKU(e.target.value));
+  const triggerAction = (action: { type: 'add' | 'edit' | 'delete' | 'bulk_update', product?: Product }) => {
+    if (action.type === 'add') {
+      setEditingProduct(null);
+      setIsModalOpen(true);
+    } else if (action.type === 'edit' && action.product) {
+      setEditingProduct(action.product);
+      setIsModalOpen(true);
+    } else if (action.type === 'delete' && action.product?.id) {
+      deleteProduct(action.product.id);
+    } else if (action.type === 'bulk_update') {
+      setIsBulkModalOpen(true);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const handleProductSave = async (productData: Product) => {
     setIsSaving(true);
-    setSaveError(null);
-    const formData = new FormData(e.currentTarget);
-    const costPrice = parseFloat(formData.get('costPrice') as string);
-    const price = parseFloat(formData.get('price') as string);
-    const stock = parseInt(formData.get('stock') as string);
-    const minStock = parseInt(formData.get('minStock') as string);
-    const conversionRateStr = formData.get('conversionRate') as string;
-    const conversionRate = conversionRateStr ? parseInt(conversionRateStr) : undefined;
-
-    if (isNaN(costPrice) || isNaN(price) || isNaN(stock) || isNaN(minStock)) {
-      setSaveError('Please enter valid numbers for prices and stock.');
-      setIsSaving(false);
-      return;
-    }
-    
-    if (conversionRateStr && isNaN(conversionRate!)) {
-      setSaveError('Please enter a valid number for conversion rate.');
-      setIsSaving(false);
-      return;
-    }
-
     try {
-      console.log('Saving inventory product data...');
-      
-      const productId = editingProduct?.id || crypto.randomUUID();
-      const imageUrls = editingProduct?.imageUrls || (editingProduct?.imageUrl ? [editingProduct.imageUrl] : []);
-      
-      // Collect category attributes
-      const categoryId = formData.get('category') as string;
-      const categoryDef = PRODUCT_CATEGORIES.find(c => c.id === categoryId);
-      const attributes: Record<string, any> = {};
-      if (categoryDef) {
-        categoryDef.fields.forEach(field => {
-          const value = formData.get(`attr_${field.name}`);
-          if (value !== null) {
-            attributes[field.name] = field.type === 'number' ? Number(value) : value;
-          }
-        });
-      }
-
-      const productData: Product = {
-        id: productId,
-        userId: ownerId,
-        name: formData.get('name') as string,
-        type: formData.get('type') as 'product' | 'service',
-        sku: formData.get('sku') as string,
-        hsnCode: formData.get('hsnCode') as string,
-        gstRate: parseFloat(formData.get('gstRate') as string) || 0,
-        costPrice,
-        price,
-        stock,
-        primaryUnit: formData.get('primaryUnit') as string,
-        secondaryUnit: formData.get('secondaryUnit') as string || undefined,
-        conversionRate,
-        minStock,
-        trackInventory: formData.get('trackInventory') === 'on',
-        category: categoryId,
-        attributes,
-        imageUrl: imageUrls[0] || '',
-        imageUrls: imageUrls,
-        createdAt: editingProduct?.createdAt || Date.now(),
-        updatedAt: Date.now(),
-      };
-
       await saveInventoryProduct(productData);
-      
-      // Close modal
       setIsModalOpen(false);
       setEditingProduct(null);
-      setImageFiles([]);
-      setImagePreviews([]);
-      setIsSaving(false);
-
+      
       // Refresh products list
       const q = query(collection(db, 'products'), where('userId', '==', ownerId));
       const snapshot = await withTimeout(getDocs(q), 'LIST products');
       setProducts(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Product)));
-      console.log('Product save process completed');
     } catch (error) {
-      console.error('Error in handleSubmit:', error);
-      let errorMessage = 'Failed to save product. Please try again.';
-      if (error instanceof Error) {
-        try {
-          const parsed = JSON.parse(error.message);
-          if (parsed.error) {
-            errorMessage = `Firestore Error: ${parsed.error} (${parsed.operationType})`;
-          } else {
-            errorMessage = error.message;
-          }
-        } catch (e) {
-          errorMessage = error.message;
-        }
-      }
-      setSaveError(errorMessage);
+       console.error('Error in handleProductSave:', error);
+       alert('Failed to save product. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -359,7 +180,7 @@ export function Inventory({ user, ownerId, role }: { user: FirebaseUser; ownerId
     const batch = writeBatch(db);
     for (const id of selectedIds) {
       const product = products.find(p => p.id === id);
-      if (product) {
+      if (product && product.type === 'product') {
         let newStock = product.stock;
         if (mode === 'add') newStock += amount;
         else if (mode === 'subtract') newStock -= amount;
@@ -395,29 +216,6 @@ export function Inventory({ user, ownerId, role }: { user: FirebaseUser; ownerId
     }
   };
 
-  const isGlobalInventoryEnabled = profile?.trackInventory !== false;
-
-  const triggerAction = (action: { type: 'add' | 'edit' | 'delete' | 'bulk_update', product?: Product }) => {
-    setPendingAction(action);
-    if (action.type === 'add') {
-      setEditingProduct(null);
-      setSkuValue('');
-      setImageFiles([]);
-      setImagePreviews([]);
-      setIsModalOpen(true);
-    } else if (action.type === 'edit' && action.product) {
-      setEditingProduct(action.product);
-      setSkuValue(action.product.sku);
-      setImageFiles([]);
-      setImagePreviews([]);
-      setIsModalOpen(true);
-    } else if (action.type === 'delete' && action.product?.id) {
-      deleteProduct(action.product.id);
-    } else if (action.type === 'bulk_update') {
-      setIsBulkModalOpen(true);
-    }
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -444,6 +242,8 @@ export function Inventory({ user, ownerId, role }: { user: FirebaseUser; ownerId
           </button>
         </div>
       </div>
+
+      {/* ... AI Quick Add Section ... */}
 
       {/* AI Quick Add Section */}
       {canEdit && (
@@ -586,7 +386,9 @@ export function Inventory({ user, ownerId, role }: { user: FirebaseUser; ownerId
                   </td>
                   {isGlobalInventoryEnabled && (
                     <td className="px-6 py-4">
-                      {product.trackInventory === false ? (
+                      {product.type === 'service' ? (
+                        <span className="text-slate-300">N/A</span>
+                      ) : product.trackInventory === false ? (
                         <div className="flex items-center gap-2 text-slate-400 italic text-xs">
                           <Database size={14} />
                           Not Tracked
@@ -646,266 +448,15 @@ export function Inventory({ user, ownerId, role }: { user: FirebaseUser; ownerId
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-              <h2 className="text-xl font-bold text-slate-900">
-                {editingProduct ? 'Edit Product' : 'Add New Product'}
-              </h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                ✕
-              </button>
-            </div>
-            <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-              {saveError && (
-                <div className="bg-red-50 text-red-600 p-3 rounded-xl text-xs font-medium border border-red-100 flex items-center gap-2">
-                  <AlertTriangle size={14} />
-                  {saveError}
-                </div>
-              )}
-              
-              <div className="flex bg-slate-100 p-1 rounded-xl mb-4">
-                <button
-                  type="button"
-                  onClick={() => setEditingProduct(prev => ({ ...prev!, type: 'product' }))}
-                  className={cn(
-                    "flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all",
-                    (editingProduct?.type || 'product') === 'product' ? "bg-white shadow-sm text-slate-900" : "text-slate-500"
-                  )}
-                >
-                  Product
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditingProduct(prev => ({ ...prev!, type: 'service' }))}
-                  className={cn(
-                    "flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all",
-                    editingProduct?.type === 'service' ? "bg-white shadow-sm text-slate-900" : "text-slate-500"
-                  )}
-                >
-                  Service
-                </button>
-                <input type="hidden" name="type" value={editingProduct?.type || 'product'} />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2 space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Product Name</label>
-                  <input 
-                    name="name" 
-                    required 
-                    defaultValue={editingProduct?.name} 
-                    onChange={handleNameChange}
-                    className="w-full" 
-                    placeholder="e.g. Wireless Mouse" 
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">SKU / Service Code</label>
-                  <input 
-                    name="sku" 
-                    required 
-                    value={skuValue}
-                    onChange={(e) => setSkuValue(e.target.value)}
-                    className="w-full font-mono" 
-                    placeholder={editingProduct?.type === 'service' ? "SERV-001" : "PROD-001"} 
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    {editingProduct?.type === 'service' ? 'SAC Code' : 'HSN Code'}
-                  </label>
-                  <input name="hsnCode" defaultValue={editingProduct?.hsnCode} className="w-full" placeholder={editingProduct?.type === 'service' ? "e.g. 9983" : "e.g. 8471"} />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">GST Rate (%)</label>
-                  <select name="gstRate" defaultValue={editingProduct?.gstRate || 0} className="w-full">
-                    <option value="0">0% (Exempt)</option>
-                    <option value="5">5%</option>
-                    <option value="12">12%</option>
-                    <option value="18">18%</option>
-                    <option value="28">28%</option>
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Category</label>
-                  <select 
-                    name="category" 
-                    required 
-                    defaultValue={editingProduct?.category} 
-                    className="w-full"
-                    onChange={(e) => {
-                      // Force re-render to show dynamic fields
-                      setEditingProduct(prev => ({ ...prev!, category: e.target.value, attributes: {} }));
-                    }}
-                  >
-                    <option value="">Select Category</option>
-                    {PRODUCT_CATEGORIES.map(cat => (
-                      <option key={cat.id} value={cat.id}>{cat.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Dynamic Category Fields */}
-                {editingProduct?.category && (
-                  <div className="col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                    <div className="col-span-2">
-                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Category Details</h4>
-                    </div>
-                    {PRODUCT_CATEGORIES.find(c => c.id === editingProduct.category)?.fields.map(field => (
-                      <div key={field.name} className="space-y-1.5">
-                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                          {field.label} {field.required && '*'}
-                        </label>
-                        {field.type === 'select' ? (
-                          <select
-                            name={`attr_${field.name}`}
-                            required={field.required}
-                            defaultValue={editingProduct.attributes?.[field.name] || ''}
-                            className="w-full"
-                          >
-                            <option value="">Select {field.label}</option>
-                            {field.options?.map(opt => (
-                              <option key={opt} value={opt}>{opt}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <input
-                            name={`attr_${field.name}`}
-                            type={field.type}
-                            required={field.required}
-                            defaultValue={editingProduct.attributes?.[field.name] || ''}
-                            className="w-full"
-                            placeholder={`Enter ${field.label.toLowerCase()}`}
-                          />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Cost Price (₹)</label>
-                  <input name="costPrice" type="number" step="0.01" required defaultValue={editingProduct?.costPrice} className="w-full" placeholder="2000.00" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Selling Price (₹)</label>
-                  <input name="price" type="number" step="0.01" required defaultValue={editingProduct?.price} className="w-full" placeholder="2999.00" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Unit</label>
-                  <input name="primaryUnit" required defaultValue={editingProduct?.primaryUnit || (editingProduct?.type === 'service' ? 'Hour' : '')} className="w-full" placeholder={editingProduct?.type === 'service' ? "e.g. Hour, Visit" : "e.g. Box"} />
-                </div>
-                {editingProduct?.type !== 'service' && (
-                  <>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Secondary Unit (Opt)</label>
-                      <input name="secondaryUnit" defaultValue={editingProduct?.secondaryUnit} className="w-full" placeholder="e.g. Piece" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Conversion Rate</label>
-                      <input name="conversionRate" type="number" defaultValue={editingProduct?.conversionRate} className="w-full" placeholder="e.g. 12" />
-                    </div>
-                  </>
-                )}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    {editingProduct?.type === 'service' ? 'Availability / Limit' : 'Initial Stock'}
-                  </label>
-                  <input name="stock" type="number" required defaultValue={editingProduct?.stock || (editingProduct?.type === 'service' ? 999999 : '')} className="w-full" placeholder="100" />
-                </div>
-                <div className="space-y-1.5 col-span-2">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Low Stock Alert Level</label>
-                  <input name="minStock" type="number" required defaultValue={editingProduct?.minStock || 10} className="w-full" placeholder="10" />
-                </div>
-                <div className="space-y-1.5 col-span-2">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Product Images</label>
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                    {/* Existing and New Previews */}
-                    {(editingProduct?.imageUrls || (editingProduct?.imageUrl ? [editingProduct.imageUrl] : [])).map((url, idx) => {
-                      return (
-                        <div key={idx} className="relative aspect-square border-2 border-slate-200 rounded-lg overflow-hidden bg-white group">
-                          <img 
-                            src={url} 
-                            alt={`Preview ${idx + 1}`} 
-                            className="w-full h-full object-cover"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeImage(idx)}
-                            className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                    
-                    {/* Add Button */}
-                    <label className="aspect-square border-2 border-dashed border-slate-200 rounded-lg flex flex-col items-center justify-center bg-white hover:bg-slate-50 cursor-pointer transition-colors group relative">
-                      {isUploading ? (
-                        <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />
-                      ) : (
-                        <>
-                          <Camera className="w-5 h-5 text-slate-300 group-hover:text-slate-400" />
-                          <span className="text-[8px] font-medium text-slate-400 mt-1">Upload Image</span>
-                        </>
-                      )}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={handleImageChange}
-                        disabled={isUploading}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-                  <p className="text-[10px] text-slate-500 leading-tight">Upload one or more product photos. They will be stored securely.</p>
-                </div>
-                <div className="space-y-1.5 col-span-2">
-                  <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
-                    <div className="flex items-center gap-2">
-                      <div className={`p-1.5 rounded-lg ${editingProduct?.trackInventory !== false ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-500'}`}>
-                        <Database size={16} />
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-bold text-slate-900">Track Inventory</h4>
-                        <p className="text-[10px] text-slate-500">Enable stock tracking for this product.</p>
-                      </div>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        name="trackInventory"
-                        defaultChecked={editingProduct?.type === 'service' ? (editingProduct.trackInventory === true) : (editingProduct?.trackInventory !== false)}
-                        className="sr-only peer" 
-                      />
-                      <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-slate-900"></div>
-                    </label>
-                  </div>
-                </div>
-              </div>
-              <div className="pt-4 flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="flex-1 px-4 py-2 border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="flex-1 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isSaving && <Loader2 size={16} className="animate-spin" />}
-                  {editingProduct ? 'Update' : 'Save'} {editingProduct?.type === 'service' ? 'Service' : 'Product'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <ProductForm 
+          initialData={editingProduct}
+          ownerId={ownerId}
+          onSave={handleProductSave}
+          onClose={() => setIsModalOpen(false)}
+          isSaving={isSaving}
+        />
       )}
+
       {isBulkModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">

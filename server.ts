@@ -29,13 +29,71 @@ function getDb() {
 }
 
 const app = express();
+app.use(express.json());
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Gemini Setup
+import { GoogleGenAI, Modality } from "@google/genai";
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build',
+    }
+  }
+});
 
 // API Routes
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.url}`);
   next();
 });
+
+app.post("/api/assistant/chat", async (req, res) => {
+  try {
+    const { message, systemInstruction } = req.body;
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: [{ role: "user", parts: [{ text: message }] }],
+      config: {
+        systemInstruction,
+        responseMimeType: "application/json"
+      }
+    });
+    res.json({ text: response.text });
+  } catch (error) {
+    console.error("Gemini Chat Error:", error);
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+app.post("/api/assistant/tts", async (req, res) => {
+  try {
+    const { text } = req.body;
+    const response = await ai.models.generateContent({
+      model: "gemini-3.1-flash-tts-preview",
+      contents: [{ parts: [{ text: `Say in a friendly Indian shopkeeper tone: ${text}` }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: 'Kore' },
+          },
+        },
+      },
+    });
+
+    const audioPart = response.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+    res.json({ 
+      audio: audioPart?.data,
+      mimeType: audioPart?.mimeType || 'audio/mp3'
+    });
+  } catch (error) {
+    console.error("Gemini TTS Error:", error);
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
 app.get("/api/health", (req, res) => res.json({ status: "ok", env: process.env.NODE_ENV }));
 
 app.get("/api/cron/reminders", async (req, res) => {

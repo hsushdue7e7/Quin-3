@@ -1,41 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { Package, Smartphone, Laptop, RefreshCw } from 'lucide-react';
+import React, { useState } from 'react';
+import { Package } from 'lucide-react';
 import { motion } from 'motion/react';
 import { auth, db } from '../lib/firebase';
-import { signInWithPopup, signInWithRedirect, getRedirectResult, User } from 'firebase/auth';
+import { signInWithPopup, User } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { googleProvider } from '../lib/firebase';
 
 export function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isRedirecting, setIsRedirecting] = useState(false);
-
-  // Handle Redirect Result on Mount
-  useEffect(() => {
-    const handleRedirectResult = async () => {
-      try {
-        const result = await getRedirectResult(auth);
-        if (result) {
-          setLoading(true);
-          await setupUserProfile(result.user);
-        }
-      } catch (err: any) {
-        console.error("Redirect Error:", err);
-        if (err.code !== 'auth/popup-closed-by-user') {
-          setError(err.message || 'Failed to sign in after redirect');
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    handleRedirectResult();
-  }, []);
-
-  const isMobileDevice = () => {
-    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-  };
 
   const setupUserProfile = async (user: User) => {
     try {
@@ -61,37 +34,17 @@ export function Login() {
     setLoading(true);
 
     try {
-      // Use Popup for all environments. Redirect is prone to 'missing initial state' 
-      // in APK/WebView environments due to storage partitioning.
       const result = await signInWithPopup(auth, googleProvider);
       await setupUserProfile(result.user);
     } catch (err: any) {
       console.error("Login Error:", err);
-      
-      if (err.code === 'auth/popup-blocked') {
-        setError('Popup blocked by browser. Please enable popups for this site.');
-      } else if (err.code === 'auth/operation-not-supported-in-this-environment') {
-        setError('Google Login is restricted in this specific viewer. Please open in Chrome or a standard browser.');
-      } else if (err.code !== 'auth/popup-closed-by-user') {
+      if (err.code !== 'auth/popup-closed-by-user') {
         setError(err.message || 'Failed to sign in with Google');
       }
     } finally {
       setLoading(false);
-      setIsRedirecting(false);
     }
   };
-
-  if (isRedirecting) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4">
-        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}>
-          <Package size={48} className="text-indigo-600 mb-6" />
-        </motion.div>
-        <h2 className="text-xl font-bold text-slate-800">Redirecting to Google...</h2>
-        <p className="text-slate-500 text-sm mt-2">Checking authentications</p>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
@@ -115,12 +68,7 @@ export function Login() {
               className="w-full bg-white text-slate-700 py-4 rounded-2xl font-bold flex items-center justify-center gap-3 border border-slate-200 hover:bg-slate-50 transition-all shadow-md active:scale-95 disabled:opacity-50 relative overflow-hidden"
             >
               {loading ? (
-                <div className="flex items-center gap-2">
-                  <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}>
-                    <RefreshCw size={20} className="text-indigo-600" />
-                  </motion.div>
-                  <span>Authenticating...</span>
-                </div>
+                <span>Authenticating...</span>
               ) : (
                 <>
                   <svg className="w-6 h-6" viewBox="0 0 24 24">
@@ -133,17 +81,6 @@ export function Login() {
                 </>
               )}
             </button>
-            
-            <div className="flex justify-center gap-4 text-[10px] text-slate-400 font-medium uppercase tracking-widest pt-2">
-              <div className="flex items-center gap-1.5">
-                <Laptop size={12} />
-                <span>Desktop Optimized</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Smartphone size={12} />
-                <span>Mobile Ready</span>
-              </div>
-            </div>
           </div>
 
           <div className="text-center">

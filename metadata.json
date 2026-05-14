@@ -1,5 +1,6 @@
 {
   "name": "Quin: Offline Billing & Inventory",
   "description": "A professional offline-first billing and inventory management system with real-time stock tracking and invoice generation.",
-  "requestFramePermissions": ["microphone", "bluetooth", "usb", "web-share"]
+  "requestFramePermissions": ["microphone", "bluetooth", "usb", "web-share"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
