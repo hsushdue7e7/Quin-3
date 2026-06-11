@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { TrendingDown, X } from 'lucide-react';
-import { saveExpense } from '../lib/firestore';
+import { saveExpense, logActivity } from '../lib/firestore';
 import { type Expense } from '../db';
 import { User as FirebaseUser } from 'firebase/auth';
 
@@ -26,6 +26,7 @@ export function AddExpenseModal({ isOpen, onClose, ownerId, user, onExpenseAdded
 
     setIsLoading(true);
     try {
+      const staffName = user.displayName || user.email?.split('@')[0] || 'Staff';
       await saveExpense({
         userId: ownerId,
         amount: Number(amount),
@@ -34,8 +35,20 @@ export function AddExpenseModal({ isOpen, onClose, ownerId, user, onExpenseAdded
         paymentMethod,
         date: Date.now(),
         createdBy: user.uid,
-        staffName: user.displayName || user.email?.split('@')[0] || 'Staff'
+        staffName
       } as Expense);
+
+      // Log activity
+      await logActivity({
+        userId: ownerId,
+        staffId: user.uid,
+        staffName,
+        action: `Added expense: ${category}`,
+        details: `Amount: ${amount}, Method: ${paymentMethod}${description ? `, Note: ${description}` : ''}`,
+        type: 'expense',
+        timestamp: Date.now()
+      });
+
       onExpenseAdded();
       onClose();
     } catch (error) {

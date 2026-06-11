@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
-import { type Product, type InvoiceItem, type Invoice, UserRole } from '../db';
-import { Plus, Trash2, Printer, Save, Search, User as UserIcon, FileText, IndianRupee, ChevronDown, ChevronUp } from 'lucide-react';
+import { type Product, type InvoiceItem, type Invoice, UserRole, type SplitPayment } from '../db';
+import { Plus, Trash2, Printer, Save, Search, User as UserIcon, FileText, IndianRupee, ChevronDown, ChevronUp, Split } from 'lucide-react';
 import { formatCurrency, generateInvoiceNumber, cn, formatPhone } from '../lib/utils';
 import { PrintModal } from './PrintModal';
-import { getInvoices, getProfile, getInvoice, type Profile as ProfileType } from '../lib/firestore';
+import { getInvoices, getProfile, getInvoice, type Profile as ProfileType, logActivity } from '../lib/firestore';
 import { db } from '../lib/firebase';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc } from 'firebase/firestore';
 
@@ -42,7 +42,8 @@ export function Billing({
     d.setDate(d.getDate() + 7); // Default 7 days
     return d.toISOString().split('T')[0];
   });
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'upi' | 'other'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'upi' | 'other' | 'split'>('cash');
+  const [splitPayments, setSplitPayments] = useState<SplitPayment[]>([]);
   const [taxPercentage, setTaxPercentage] = useState<number>(10);
   const [items, setItems] = useState<InvoiceItem[]>(initialItems || []);
   const [searchTerm, setSearchTerm] = useState('');
@@ -148,6 +149,7 @@ export function Billing({
             setValidityDate(new Date(invoice.validityDate).toISOString().split('T')[0]);
           }
           setPaymentMethod(invoice.paymentMethod || 'cash');
+          setSplitPayments(invoice.splitPayments || []);
           setTaxPercentage(invoice.taxPercentage ?? 10);
           setIsFullPayment(invoice.receivedAmount >= invoice.total);
           setIsGstInvoice(invoice.isGstInvoice ?? false);
@@ -312,10 +314,14 @@ export function Billing({
   const totalGst = cgstTotal + sgstTotal + igstTotal;
 
   const tax = isGstInvoice ? totalGst : (subtotal * (taxPercentage / 100));
-  const total = subtotal + tax;
+  const finalDiscount = parseFloat(String(discount)) || 0;
+  const netTotal = subtotal + tax - finalDiscount;
   
-  const finalReceivedAmount = (isDirectSell || isFullPayment) ? total : (Number(receivedAmount) || 0);
-  const creditAmount = Math.max(0, total - finalReceivedAmount);
+  const totalSplitReceived = splitPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const finalReceivedAmount = paymentMethod === 'split'
+    ? totalSplitReceived
+    : (isDirectSell || isFullPayment) ? netTotal : (Number(receivedAmount) || 0);
+  const creditAmount = Math.max(0, netTotal - finalReceivedAmount);
 
   const handleSave = async () => {
     const finalCustomerName = isDirectSell ? 'Walk-in Customer' : customerName;
@@ -325,7 +331,7 @@ export function Billing({
       return;
     }
 
-    const invoiceData = {
+    const invoiceData: any = {
       userId: ownerId,
       customerName: finalCustomerName,
       customerMobile: isDirectSell ? '' : customerMobile,
@@ -333,8 +339,7 @@ export function Billing({
       customerGstin: isGstInvoice ? customerGstin : '',
       isGstInvoice,
       stateOfSupply,
-      ...(isQuotation ? { type: 'quotation' as const } : { type: 'invoice' as const }),
-      validityDate: isQuotation ? new Date(validityDate).getTime() : undefined,
+      type: isQuotation ? 'quotation' : 'invoice',
       discount: parseFloat(String(discount)) || 0,
       items: itemsWithGst,
       subtotal,
@@ -344,7 +349,7 @@ export function Billing({
       cgstTotal: isGstInvoice ? cgstTotal : 0,
       sgstTotal: isGstInvoice ? sgstTotal : 0,
       igstTotal: isGstInvoice ? igstTotal : 0,
-      total: total - (parseFloat(String(discount)) || 0),
+      total: netTotal,
       receivedAmount: finalReceivedAmount,
       paymentMethod,
       creditAmount,
@@ -353,6 +358,14 @@ export function Billing({
       createdBy: originalInvoice?.createdBy || user.uid,
       staffName: originalInvoice?.staffName || user.displayName || user.email?.split('@')[0] || 'Staff'
     };
+
+    if (isQuotation) {
+      invoiceData.validityDate = new Date(validityDate).getTime();
+    }
+
+    if (paymentMethod === 'split') {
+      invoiceData.splitPayments = splitPayments;
+    }
 
     try {
       // Stock Reconciliation
@@ -398,10 +411,33 @@ export function Billing({
         const collName = isQuotation ? 'quotations' : 'invoices';
         const docRef = doc(db, collName, originalInvoice.id.toString());
         await updateDoc(docRef, invoiceData);
+
+        // Log edit activity
+        await logActivity({
+          userId: ownerId,
+          staffId: user.uid,
+          staffName: invoiceData.staffName,
+          action: `Updated ${isQuotation ? 'quotation' : 'invoice'} ${invoiceData.invoiceNumber}`,
+          details: `Total: ${formatCurrency(invoiceData.total)}, Customer: ${invoiceData.customerName}`,
+          type: isQuotation ? 'other' : 'invoice',
+          timestamp: Date.now()
+        });
+
         alert(isQuotation ? 'Quotation updated successfully!' : 'Sale/Invoice updated successfully!');
       } else {
         const collName = isQuotation ? 'quotations' : 'invoices';
         await addDoc(collection(db, collName), invoiceData);
+
+        // Log create activity
+        await logActivity({
+          userId: ownerId,
+          staffId: user.uid,
+          staffName: invoiceData.staffName,
+          action: `Created ${isQuotation ? 'quotation' : 'invoice'} ${invoiceData.invoiceNumber}`,
+          details: `Total: ${formatCurrency(invoiceData.total)}, Customer: ${invoiceData.customerName}`,
+          type: isQuotation ? 'other' : 'invoice',
+          timestamp: Date.now()
+        });
       }
 
       if (isQuotation) {
@@ -454,8 +490,7 @@ export function Billing({
     customerGstin: isGstInvoice ? customerGstin : '',
     isGstInvoice,
     stateOfSupply,
-    ...(isQuotation ? { type: 'quotation' as const } : { type: 'invoice' as const }),
-    validityDate: isQuotation ? new Date(validityDate).getTime() : undefined,
+    type: isQuotation ? 'quotation' : 'invoice',
     discount: parseFloat(String(discount)) || 0,
     items: itemsWithGst,
     subtotal,
@@ -465,13 +500,21 @@ export function Billing({
     cgstTotal: isGstInvoice ? cgstTotal : 0,
     sgstTotal: isGstInvoice ? sgstTotal : 0,
     igstTotal: isGstInvoice ? igstTotal : 0,
-    total: total - (parseFloat(String(discount)) || 0),
+    total: netTotal,
     receivedAmount: finalReceivedAmount,
     paymentMethod,
     creditAmount,
     date: originalInvoice ? originalInvoice.date : Date.now(),
     invoiceNumber: originalInvoice ? originalInvoice.invoiceNumber : generateInvoiceNumber()
   };
+
+  if (isQuotation) {
+    currentInvoice.validityDate = new Date(validityDate).getTime();
+  }
+
+  if (paymentMethod === 'split') {
+    currentInvoice.splitPayments = splitPayments;
+  }
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -777,7 +820,7 @@ export function Billing({
                 className="w-full"
                 placeholder="9876543210"
               />
-              {allInvoices.some(inv => inv.customerMobile === customerMobile && inv.id !== originalInvoice?.id) && (
+              {customerMobile.length > 3 && allInvoices.some(inv => inv.customerMobile === customerMobile && inv.id !== originalInvoice?.id) && (
                 <p className="text-[10px] text-amber-600 font-bold mt-1">
                   Warning: This mobile number is already in records. Transactions will be merged.
                 </p>
@@ -912,7 +955,7 @@ export function Billing({
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
                   <input
                     type="number"
-                    value={isFullPayment ? total.toFixed(2) : receivedAmount}
+                    value={isFullPayment ? netTotal.toFixed(2) : receivedAmount}
                     onChange={(e) => setReceivedAmount(e.target.value)}
                     disabled={isFullPayment}
                     className={cn(
@@ -923,21 +966,89 @@ export function Billing({
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  {(['cash', 'upi', 'card', 'other'] as const).map((method) => (
+                  {(['cash', 'upi', 'card', 'other', 'split'] as const).map((method) => (
                     <button
                       key={method}
-                      onClick={() => setPaymentMethod(method)}
+                      onClick={() => {
+                        setPaymentMethod(method);
+                        if (method === 'split' && splitPayments.length === 0) {
+                          setSplitPayments([{ method: 'cash', amount: 0 }]);
+                        }
+                      }}
                       className={cn(
-                        "py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border",
+                        "py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border flex items-center justify-center gap-1.5",
                         paymentMethod === method 
                           ? "bg-slate-900 border-slate-900 text-white shadow-md shadow-slate-200" 
                           : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
                       )}
                     >
+                      {method === 'split' && <Split size={14} />}
                       {method}
                     </button>
                   ))}
                 </div>
+
+                {paymentMethod === 'split' && (
+                  <div className="space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <div className="flex justify-between items-center mb-1">
+                      <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Split Breakdown</h3>
+                      <button 
+                        onClick={() => setSplitPayments([...splitPayments, { method: 'cash', amount: 0 }])}
+                        className="text-indigo-600 text-[10px] font-bold hover:underline"
+                      >
+                        + Add Method
+                      </button>
+                    </div>
+                    {splitPayments.map((p, idx) => (
+                      <div key={idx} className="flex gap-2 items-center">
+                        <select
+                          value={p.method}
+                          onChange={(e) => {
+                            const newSplits = [...splitPayments];
+                            newSplits[idx].method = e.target.value as any;
+                            setSplitPayments(newSplits);
+                          }}
+                          className="w-24 text-[10px] uppercase font-bold py-1.5 border border-slate-200 rounded focus:ring-0"
+                        >
+                          <option value="cash">Cash</option>
+                          <option value="upi">UPI</option>
+                          <option value="card">Card</option>
+                          <option value="other">Other</option>
+                        </select>
+                        <div className="relative flex-1">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]">₹</span>
+                          <input
+                            type="number"
+                            value={p.amount || ''}
+                            onChange={(e) => {
+                              const newSplits = [...splitPayments];
+                              newSplits[idx].amount = parseFloat(e.target.value) || 0;
+                              setSplitPayments(newSplits);
+                            }}
+                            className="w-full pl-5 pr-2 py-1.5 text-xs border border-slate-200 rounded"
+                            placeholder="0.00"
+                          />
+                        </div>
+                        {splitPayments.length > 1 && (
+                          <button 
+                            onClick={() => setSplitPayments(splitPayments.filter((_, i) => i !== idx))}
+                            className="text-rose-500 p-1 hover:bg-rose-50 rounded"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <div className="pt-2 border-t border-slate-200 flex justify-between text-[10px] font-bold">
+                      <span className="text-slate-500">Total Applied:</span>
+                      <span className={cn(
+                        totalSplitReceived > netTotal ? "text-rose-600" : "text-slate-900"
+                      )}>
+                        {formatCurrency(totalSplitReceived)}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Credit Amount</span>
@@ -1023,7 +1134,7 @@ export function Billing({
 
             <div className="pt-4 border-t border-white/20 flex justify-between text-2xl font-black text-indigo-400">
               <span className="text-white opacity-80 text-lg">Total</span>
-              <span>{formatCurrency(total - (parseFloat(String(discount)) || 0))}</span>
+              <span>{formatCurrency(netTotal)}</span>
             </div>
             {finalReceivedAmount > 0 && !isQuotation && (
               <div className="flex justify-between text-[10px] uppercase font-bold text-white/40 pt-1">

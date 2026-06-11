@@ -1,19 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { type Product, UserRole } from '../db';
-import { Plus, Search, Edit2, Trash2, AlertTriangle, Package, Database, Sparkles, Loader2 } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, AlertTriangle, Package, Database, Sparkles, Loader2, Bot, Save, TrendingUp } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 import { db } from '../lib/firebase';
 import { collection, query, where, getDocs, doc, writeBatch, getDoc } from 'firebase/firestore';
-import { saveInventoryProduct, deleteInventoryProduct, withTimeout } from '../lib/firestore';
+import { saveInventoryProduct, deleteInventoryProduct, withTimeout, logActivity } from '../lib/firestore';
 import { PRODUCT_CATEGORIES } from '../constants/categories';
 import { ProductForm } from './ProductForm';
 
-export function Inventory({ user, ownerId, role }: { user: FirebaseUser; ownerId: string; role: UserRole | null }) {
+export function Inventory({ user, ownerId, role, onViewIntelligence }: { user: FirebaseUser; ownerId: string; role: UserRole | null; onViewIntelligence?: (id: string) => void }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [isStockModalOpen, setIsStockModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [stockProduct, setStockProduct] = useState<Product | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<'recent' | 'oldest' | 'name'>('recent');
   const [filterCategory, setFilterCategory] = useState<string>('all');
@@ -136,7 +138,7 @@ Return an ARRAY of objects with these properties:
     );
   };
 
-  const triggerAction = (action: { type: 'add' | 'edit' | 'delete' | 'bulk_update', product?: Product }) => {
+  const triggerAction = (action: { type: 'add' | 'edit' | 'delete' | 'bulk_update' | 'stock', product?: Product }) => {
     if (action.type === 'add') {
       setEditingProduct(null);
       setIsModalOpen(true);
@@ -145,6 +147,9 @@ Return an ARRAY of objects with these properties:
       setIsModalOpen(true);
     } else if (action.type === 'delete' && action.product?.id) {
       deleteProduct(action.product.id);
+    } else if (action.type === 'stock' && action.product) {
+      setStockProduct(action.product);
+      setIsStockModalOpen(true);
     } else if (action.type === 'bulk_update') {
       setIsBulkModalOpen(true);
     }
@@ -153,7 +158,20 @@ Return an ARRAY of objects with these properties:
   const handleProductSave = async (productData: Product) => {
     setIsSaving(true);
     try {
+      const isNew = !productData.id;
       await saveInventoryProduct(productData);
+
+      // Log activity
+      await logActivity({
+        userId: ownerId,
+        staffId: user.uid,
+        staffName: user.displayName || user.email?.split('@')[0] || 'Staff',
+        action: `${isNew ? 'Created' : 'Updated'} product: ${productData.name}`,
+        details: isNew ? `Initial stock: ${productData.stock}` : `Updated details for SKU: ${productData.sku}`,
+        type: 'stock',
+        timestamp: Date.now()
+      });
+
       setIsModalOpen(false);
       setEditingProduct(null);
       
@@ -195,6 +213,17 @@ Return an ARRAY of objects with these properties:
     }
     await batch.commit();
 
+    // Log the bulk activity
+    await logActivity({
+      userId: ownerId,
+      staffId: user.uid,
+      staffName: user.displayName || user.email?.split('@')[0] || 'Staff',
+      action: `Bulk stock update performed`,
+      details: `${selectedIds.length} products updated (Mode: ${mode}, Amount: ${amount})`,
+      type: 'stock',
+      timestamp: Date.now()
+    });
+
     setIsBulkModalOpen(false);
     setSelectedIds([]);
     // Refresh products
@@ -205,7 +234,22 @@ Return an ARRAY of objects with these properties:
 
   const deleteProduct = async (id: string) => {
     try {
+      const productToDelete = products.find(p => p.id === id);
       await deleteInventoryProduct(id);
+
+      // Log the activity
+      if (productToDelete) {
+        await logActivity({
+          userId: ownerId,
+          staffId: user.uid,
+          staffName: user.displayName || user.email?.split('@')[0] || 'Staff',
+          action: `Deleted product: ${productToDelete.name}`,
+          details: `SKU: ${productToDelete.sku}`,
+          type: 'stock',
+          timestamp: Date.now()
+        });
+      }
+
       // Refresh products
       const q = query(collection(db, 'products'), where('userId', '==', ownerId));
       const snapshot = await getDocs(q);
@@ -414,6 +458,20 @@ Return an ARRAY of objects with these properties:
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2 md:opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
+                          onClick={() => onViewIntelligence?.(product.id!)}
+                          className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded"
+                          title="View Intelligence"
+                        >
+                          <Bot size={16} />
+                        </button>
+                        <button
+                          onClick={() => triggerAction({ type: 'stock', product })}
+                          className="p-1.5 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 rounded"
+                          title="Add Stock"
+                        >
+                          <Plus size={16} />
+                        </button>
+                        <button
                           onClick={() => triggerAction({ type: 'edit', product })}
                           className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded"
                         >
@@ -495,6 +553,124 @@ Return an ARRAY of objects with these properties:
                   className="flex-1 px-4 py-2.5 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"
                 >
                   Update Stock
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isStockModalOpen && stockProduct && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden border border-slate-100">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div>
+                <h2 className="text-xl font-black text-slate-900">Add Stock</h2>
+                <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">{stockProduct.name}</p>
+              </div>
+              <button 
+                onClick={() => setIsStockModalOpen(false)} 
+                className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-white rounded-xl transition-all"
+              >
+                ✕
+              </button>
+            </div>
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                const addQty = parseInt(formData.get('quantity') as string);
+                const newCost = parseFloat(formData.get('costPrice') as string);
+                
+                if (isNaN(addQty)) return;
+
+                setIsSaving(true);
+                try {
+                  const updatedProduct = {
+                    ...stockProduct,
+                    stock: (stockProduct.stock || 0) + addQty,
+                    costPrice: isNaN(newCost) ? stockProduct.costPrice : newCost,
+                    updatedAt: Date.now()
+                  };
+                  await saveInventoryProduct(updatedProduct);
+                  
+                  // Log the activity
+                  await logActivity({
+                    userId: ownerId,
+                    staffId: user.uid,
+                    staffName: user.displayName || user.email?.split('@')[0] || 'Staff',
+                    action: `Updated stock for ${stockProduct.name}`,
+                    details: `Added ${addQty} units. New stock: ${updatedProduct.stock}. Cost price updated to ${formatCurrency(updatedProduct.costPrice)}`,
+                    type: 'stock',
+                    timestamp: Date.now()
+                  });
+
+                  setIsStockModalOpen(false);
+                  
+                  // Refresh products
+                  const q = query(collection(db, 'products'), where('userId', '==', ownerId));
+                  const snapshot = await getDocs(q);
+                  setProducts(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Product)));
+                } catch (error) {
+                  console.error('Error updating stock:', error);
+                  alert('Failed to update stock');
+                } finally {
+                  setIsSaving(false);
+                }
+              }} 
+              className="p-8 space-y-6"
+            >
+              <div className="space-y-5">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Quantity to Add *</label>
+                  <div className="relative">
+                    <Package className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input 
+                      name="quantity" 
+                      type="number" 
+                      autoFocus
+                      required 
+                      className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-slate-200 rounded-2xl text-sm font-black focus:ring-2 focus:ring-indigo-500/20 outline-none" 
+                      placeholder="Enter quantity" 
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Purchase Cost Price (Per Unit)</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
+                    <input 
+                      name="costPrice" 
+                      type="number" 
+                      step="0.01"
+                      defaultValue={stockProduct.costPrice}
+                      className="w-full pl-10 pr-4 py-3.5 bg-slate-50 border-slate-200 rounded-2xl text-sm font-black focus:ring-2 focus:ring-indigo-500/20 outline-none" 
+                      placeholder="New purchase price" 
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-bold italic ml-2">Current cost: {formatCurrency(stockProduct.costPrice)}</p>
+                </div>
+
+                <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-100/50">
+                  <div className="flex items-center gap-2 mb-1">
+                    <TrendingUp size={14} className="text-indigo-600" />
+                    <span className="text-[10px] font-black text-indigo-900 uppercase tracking-widest">Logic Insight</span>
+                  </div>
+                  <p className="text-[10px] text-indigo-700 leading-relaxed font-medium">
+                    Updating cost price during stock entry ensures your <span className="font-bold">Gross Profit</span> calculation remains accurate for future sales.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 disabled:opacity-50"
+                >
+                  {isSaving ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
+                  Confirm Addition
                 </button>
               </div>
             </form>

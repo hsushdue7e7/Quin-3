@@ -1,5 +1,5 @@
 import { db, auth, storage } from './firebase';
-import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, addDoc, deleteDoc, onSnapshot, orderBy, limit, serverTimestamp, writeBatch, arrayUnion, increment } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, addDoc, deleteDoc, onSnapshot, orderBy, limit, serverTimestamp, writeBatch, arrayUnion, increment, or, and } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import imageCompression from 'browser-image-compression';
 import { type Invoice, type Payment, type User, type Connection, type B2BOrder, type Product, type Inquiry, type BusinessProfile, type Review, type PopularSearch, type Expense, type Staff } from '../db';
@@ -966,6 +966,7 @@ export interface Profile {
   gstin?: string;
   state?: string;
   logo?: string;
+  signatureUrl?: string;
   taxPercentage: number;
   trackInventory: boolean;
   category?: string;
@@ -1378,5 +1379,194 @@ export const deactivateStaff = async (staffId: string) => {
     await updateDoc(doc(db, 'staff', staffId), { status: 'inactive' });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+};
+
+export const logActivity = async (activity: import('../db').Activity) => {
+  const path = 'activities';
+  try {
+    await addDoc(collection(db, path), sanitizeData(activity));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+};
+
+export const getActivitiesByStaff = async (ownerId: string, staffName: string, staffUid?: string): Promise<import('../db').Activity[]> => {
+  const path = 'activities';
+  try {
+    let q;
+    if (staffUid) {
+      q = query(
+        collection(db, path), 
+        and(
+          where('userId', '==', ownerId),
+          or(
+            where('staffName', '==', staffName),
+            where('staffId', '==', staffUid)
+          )
+        ),
+        orderBy('timestamp', 'desc'),
+        limit(50)
+      );
+    } else {
+      q = query(
+        collection(db, path), 
+        where('userId', '==', ownerId),
+        where('staffName', '==', staffName),
+        orderBy('timestamp', 'desc'),
+        limit(50)
+      );
+    }
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+  } catch (error) {
+    try {
+      let q;
+      if (staffUid) {
+        q = query(
+          collection(db, path), 
+          and(
+            where('userId', '==', ownerId),
+            or(
+              where('staffName', '==', staffName),
+              where('staffId', '==', staffUid)
+            )
+          )
+        );
+      } else {
+        q = query(
+          collection(db, path), 
+          where('userId', '==', ownerId),
+          where('staffName', '==', staffName)
+        );
+      }
+      const snapshot = await getDocs(q);
+      return snapshot.docs
+        .map(doc => ({ id: doc.id, ...(doc.data() as any) }))
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, 50);
+    } catch (innerError) {
+      handleFirestoreError(error, OperationType.LIST, path);
+      return [];
+    }
+  }
+};
+
+export const getInvoicesByStaff = async (ownerId: string, staffName: string, staffUid?: string): Promise<Invoice[]> => {
+  const path = 'invoices';
+  try {
+    let q;
+    if (staffUid) {
+      q = query(
+        collection(db, path),
+        and(
+          where('userId', '==', ownerId),
+          or(
+            where('staffName', '==', staffName),
+            where('createdBy', '==', staffUid)
+          )
+        )
+      );
+    } else {
+      q = query(
+        collection(db, path),
+        where('userId', '==', ownerId),
+        where('staffName', '==', staffName)
+      );
+    }
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+    return [];
+  }
+};
+
+export const getPaymentsByStaff = async (ownerId: string, staffName: string, staffUid?: string): Promise<Payment[]> => {
+  const path = 'payments';
+  try {
+    let q;
+    if (staffUid) {
+      q = query(
+        collection(db, path),
+        and(
+          where('userId', '==', ownerId),
+          or(
+            where('staffName', '==', staffName),
+            where('createdBy', '==', staffUid)
+          )
+        )
+      );
+    } else {
+      q = query(
+        collection(db, path),
+        where('userId', '==', ownerId),
+        where('staffName', '==', staffName)
+      );
+    }
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+    return [];
+  }
+};
+
+export const getExpensesByStaff = async (ownerId: string, staffName: string, staffUid?: string): Promise<Expense[]> => {
+  const path = 'expenses';
+  try {
+    let q;
+    if (staffUid) {
+      q = query(
+        collection(db, path),
+        and(
+          where('userId', '==', ownerId),
+          or(
+            where('staffName', '==', staffName),
+            where('createdBy', '==', staffUid)
+          )
+        )
+      );
+    } else {
+      q = query(
+        collection(db, path),
+        where('userId', '==', ownerId),
+        where('staffName', '==', staffName)
+      );
+    }
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+    return [];
+  }
+};
+
+export const getQuotationsByStaff = async (ownerId: string, staffName: string, staffUid?: string): Promise<Invoice[]> => {
+  const path = 'quotations';
+  try {
+    let q;
+    if (staffUid) {
+      q = query(
+        collection(db, path),
+        and(
+          where('userId', '==', ownerId),
+          or(
+            where('staffName', '==', staffName),
+            where('createdBy', '==', staffUid)
+          )
+        )
+      );
+    } else {
+      q = query(
+        collection(db, path),
+        where('userId', '==', ownerId),
+        where('staffName', '==', staffName)
+      );
+    }
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+  } catch (error) {
+    return [];
   }
 };

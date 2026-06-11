@@ -24,7 +24,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { PrintModal } from './PrintModal';
 import { InvoiceView } from './InvoiceView';
 import { domToPng } from 'modern-screenshot';
-import { getInvoices, getPayments, getProfile, addPayment, updateInvoice, type Profile as ProfileType } from '../lib/firestore';
+import { getInvoices, getPayments, getProfile, addPayment, updateInvoice, type Profile as ProfileType, logActivity } from '../lib/firestore';
 
 export function Customers({ 
   user, 
@@ -270,6 +270,7 @@ export function Customers({
     if (!customerDataToUse) return;
 
     // 1. Record the payment
+    const staffName = user.displayName || user.email?.split('@')[0] || 'Staff';
     await addPayment({
       userId: ownerId,
       customerName: customerDataToUse.name,
@@ -279,7 +280,18 @@ export function Customers({
       method: paymentMethod,
       note: paymentNote,
       createdBy: user.uid,
-      staffName: user.displayName || user.email?.split('@')[0] || 'Staff'
+      staffName
+    });
+
+    // Log activity
+    await logActivity({
+      userId: ownerId,
+      staffId: user.uid,
+      staffName,
+      action: `Recorded payment of ${formatCurrency(amount)}`,
+      details: `Customer: ${customerDataToUse.name}, Method: ${paymentMethod}${paymentNote ? `, Note: ${paymentNote}` : ''}`,
+      type: 'payment',
+      timestamp: Date.now()
     });
 
     // 2. Update invoices to reduce credit (oldest first)

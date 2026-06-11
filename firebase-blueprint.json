@@ -31,6 +31,7 @@
         "gstin": { "type": "string" },
         "state": { "type": "string" },
         "logo": { "type": "string" },
+        "signatureUrl": { "type": "string" },
         "taxPercentage": { "type": "number" },
         "trackInventory": { "type": "boolean" },
         "category": { "type": "string" },
@@ -100,7 +101,18 @@
         "date": { "type": "number" },
         "total": { "type": "number" },
         "receivedAmount": { "type": "number" },
-        "type": { "type": "string", "enum": ["invoice", "quotation"] }
+        "type": { "type": "string", "enum": ["invoice", "quotation"] },
+        "paymentMethod": { "type": "string", "enum": ["cash", "card", "upi", "other", "split"] },
+        "splitPayments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "method": { "type": "string", "enum": ["cash", "card", "upi", "other"] },
+              "amount": { "type": "number" }
+            }
+          }
+        }
       },
       "required": ["userId", "invoiceNumber", "customerName", "total"]
     },
@@ -212,6 +224,21 @@
         "count": { "type": "number" }
       },
       "required": ["query", "count"]
+    },
+    "Activity": {
+      "title": "Activity",
+      "description": "Staff activity and transaction log.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "staffId": { "type": "string" },
+        "staffName": { "type": "string" },
+        "action": { "type": "string" },
+        "details": { "type": "string" },
+        "type": { "type": "string", "enum": ["stock", "invoice", "payment", "expense", "security", "other"] },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["userId", "staffId", "staffName", "action", "type", "timestamp"]
     }
   },
   "firestore": {
@@ -225,6 +252,7 @@
     "payments": { "schema": "Payment", "description": "Payment records" },
     "expenses": { "schema": "Expense", "description": "Business expenses" },
     "staff": { "schema": "Staff", "description": "Staff members" },
+    "activities": { "schema": "Activity", "description": "Audit logs" },
     "connections": { "schema": "Connection", "description": "B2B connections" },
     "inquiries": { "schema": "Inquiry", "description": "B2B inquiries" },
     "b2b_orders": { "schema": "B2BOrder", "description": "Wholesale orders" },

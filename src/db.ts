@@ -63,6 +63,11 @@ export interface InvoiceItem {
   total: number;
 }
 
+export interface SplitPayment {
+  method: 'cash' | 'card' | 'upi' | 'other';
+  amount: number;
+}
+
 export interface Invoice {
   id?: string;
   userId: string;
@@ -88,7 +93,8 @@ export interface Invoice {
   invoiceNumber: string;
   type?: 'invoice' | 'quotation';
   discount?: number;
-  paymentMethod?: 'cash' | 'card' | 'upi' | 'other';
+  paymentMethod?: 'cash' | 'card' | 'upi' | 'other' | 'split';
+  splitPayments?: SplitPayment[];
   createdBy?: string;
   staffName?: string;
 }
@@ -132,6 +138,7 @@ export interface Profile {
   gstin?: string;
   state?: string;
   logo?: string;
+  signatureUrl?: string;
   taxPercentage: number;
   trackInventory: boolean;
   category?: string;
@@ -279,9 +286,21 @@ export interface Expense {
   staffName?: string;
 }
 
+export interface Activity {
+  id?: string;
+  userId: string;
+  staffId: string;
+  staffName: string;
+  action: string;
+  details?: string;
+  type: 'stock' | 'invoice' | 'payment' | 'expense' | 'security' | 'other';
+  timestamp: number;
+}
+
 export interface Staff {
   id?: string;
   userId: string; // Business owner ID
+  uid?: string; // The staff member's own Firebase UID (linked when they first login)
   name: string;
   email?: string;
   phone?: string;

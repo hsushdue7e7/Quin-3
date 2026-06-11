@@ -73,6 +73,24 @@ export function InvoiceView({
             <span>GRAND TOTAL:</span>
             <span>{formatCurrency(invoice.total)}</span>
           </div>
+          {invoice.receivedAmount > 0 && (
+            <div className="border-t border-dashed border-black mt-1 pt-1 text-[9px]">
+              <p className="font-bold">PAID DETAILS:</p>
+              {invoice.paymentMethod === 'split' && invoice.splitPayments ? (
+                invoice.splitPayments.map((p, i) => (
+                  <div key={i} className="flex justify-between">
+                    <span className="uppercase">{p.method}:</span>
+                    <span>{formatCurrency(p.amount)}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="flex justify-between">
+                  <span className="uppercase">{invoice.paymentMethod}:</span>
+                  <span>{formatCurrency(invoice.receivedAmount)}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="mt-4 text-center text-[9px] border-t border-dashed border-black pt-2">
@@ -193,9 +211,24 @@ export function InvoiceView({
             <div className="mt-4 p-4 border border-emerald-100 bg-emerald-50 rounded-xl">
               <div className="flex items-center gap-2 mb-1">
                 <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                <h4 className="font-bold text-emerald-900 text-sm uppercase">Payment Successful</h4>
+                <h4 className="font-bold text-emerald-900 text-sm uppercase">Payment Details</h4>
               </div>
-              <p className="text-xs text-emerald-700">Received {formatCurrency(invoice.receivedAmount)} via {invoice.paymentMethod}</p>
+              {invoice.paymentMethod === 'split' && invoice.splitPayments ? (
+                <div className="space-y-1 mt-2">
+                  {invoice.splitPayments.map((p, i) => (
+                    <div key={i} className="flex justify-between text-xs text-emerald-700">
+                      <span className="uppercase font-medium">{p.method}</span>
+                      <span className="font-bold">{formatCurrency(p.amount)}</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between text-xs text-emerald-900 border-t border-emerald-200 mt-1 pt-1 font-black">
+                    <span>TOTAL RECEIVED</span>
+                    <span>{formatCurrency(invoice.receivedAmount)}</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-emerald-700">Received {formatCurrency(invoice.receivedAmount)} via {invoice.paymentMethod}</p>
+              )}
             </div>
           )}
         </div>
@@ -250,8 +283,17 @@ export function InvoiceView({
              <p className="text-[10px] italic text-slate-600">Rupees Only</p>
           </div>
           
-          <div className="mt-12 pt-8 text-center">
+          <div className="mt-12 pt-8 text-center relative">
             <div className="w-full border-t border-slate-200 mt-8 mb-2"></div>
+            {profile?.signatureUrl && (
+              <div className="absolute bottom-12 right-0 left-0 flex justify-center pointer-events-none">
+                <img 
+                  src={profile.signatureUrl} 
+                  alt="Authorized Signature" 
+                  className="h-16 object-contain mix-blend-multiply"
+                />
+              </div>
+            )}
             <p className="text-[10px] font-bold uppercase text-slate-400">Authorized Signatory</p>
             <p className="text-xs font-bold text-indigo-900 mt-1">For {profile?.businessName}</p>
           </div>

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, lazy, Suspense } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { 
   TrendingUp, 
@@ -12,8 +12,11 @@ import {
   Users, 
   AlertCircle,
   TrendingUp as TrendingUpIcon,
-  Info
+  Info,
+  Sparkles
 } from 'lucide-react';
+
+const ProductInsights = lazy(() => import('./ProductInsights').then(m => ({ default: m.ProductInsights })));
 import { 
   XAxis, 
   YAxis, 
@@ -107,8 +110,15 @@ function SummaryCard({ title, value, prevValue, icon: Icon, color, suffix = '', 
   );
 }
 
-export function Reports({ user, ownerId }: { user: FirebaseUser; ownerId: string }) {
+export function Reports({ user, ownerId, initialProductId, onClearInitialProduct }: { user: FirebaseUser; ownerId: string; initialProductId?: string | null; onClearInitialProduct?: () => void }) {
+  const [view, setView] = useState<'main' | 'product-insights'>(initialProductId ? 'product-insights' : 'main');
   const [timeRange, setTimeRange] = useState<'day' | 'week' | 'month' | 'year'>('month');
+
+  useEffect(() => {
+    if (initialProductId) {
+      setView('product-insights');
+    }
+  }, [initialProductId]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -336,6 +346,21 @@ export function Reports({ user, ownerId }: { user: FirebaseUser; ownerId: string
 
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
+  if (view === 'product-insights') {
+    return (
+      <Suspense fallback={<div className="flex items-center justify-center p-20"><div className="w-12 h-12 border-4 border-indigo-600/10 border-t-indigo-600 rounded-full animate-spin" /></div>}>
+        <ProductInsights 
+          ownerId={ownerId} 
+          initialProductId={initialProductId} 
+          onBack={() => {
+            setView('main');
+            onClearInitialProduct?.();
+          }} 
+        />
+      </Suspense>
+    );
+  }
+
   return (
     <div className="space-y-8 pb-12">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -344,21 +369,31 @@ export function Reports({ user, ownerId }: { user: FirebaseUser; ownerId: string
           <p className="text-slate-500 mt-1 text-sm">Comprehensive performance report for your business.</p>
         </div>
 
-        <div className="flex items-center gap-2 bg-white p-1 rounded-2xl border border-slate-200 shadow-sm">
-          {(['day', 'week', 'month', 'year'] as const).map((range) => (
-            <button
-              key={range}
-              onClick={() => setTimeRange(range)}
-              className={cn(
-                "px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all",
-                timeRange === range 
-                  ? "bg-slate-900 text-white shadow-lg" 
-                  : "text-slate-500 hover:bg-slate-50"
-              )}
-            >
-              {range}
-            </button>
-          ))}
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setView('product-insights')}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all font-black"
+          >
+            <Sparkles size={16} />
+            Insight Product
+          </button>
+          
+          <div className="flex items-center gap-2 bg-white p-1 rounded-2xl border border-slate-200 shadow-sm">
+            {(['day', 'week', 'month', 'year'] as const).map((range) => (
+              <button
+                key={range}
+                onClick={() => setTimeRange(range)}
+                className={cn(
+                  "px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all",
+                  timeRange === range 
+                    ? "bg-slate-900 text-white shadow-lg" 
+                    : "text-slate-500 hover:bg-slate-50"
+                )}
+              >
+                {range}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -677,7 +712,7 @@ export function Reports({ user, ownerId }: { user: FirebaseUser; ownerId: string
             <div className="p-2 bg-white/10 rounded-xl backdrop-blur-md">
               <TrendingUpIcon size={24} className="text-emerald-400" />
             </div>
-            <h3 className="text-2xl font-bold">Smart Business Insights</h3>
+            <h3 className="text-2xl font-bold">Business Data Insights</h3>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

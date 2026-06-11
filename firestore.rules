@@ -132,6 +132,12 @@ service cloud.firestore {
       allow delete: if isSignedIn() && isOwner(resource.data.userId);
     }
 
+    match /activities/{activityId} {
+      allow get: if isSignedIn() && canAccess(resource.data.userId);
+      allow list: if isSignedIn() && canAccess(resource.data.userId);
+      allow create: if isSignedIn() && canAccess(incoming().userId);
+    }
+
     match /connections/{connectionId} {
       allow read: if isSignedIn() && (request.auth.uid == resource.data.fromUserId || request.auth.uid == resource.data.toUserId);
       allow create: if isSignedIn() && (request.auth.uid == incoming().fromUserId || request.auth.uid == incoming().toUserId);

@@ -4,7 +4,7 @@ import { type Invoice, type Product, type Payment, type Expense, UserRole } from
 import { 
   Package, IndianRupee, ShoppingCart, TrendingUp, AlertCircle, Zap, Printer, 
   ArrowUpRight, ArrowDownRight, Wallet, CreditCard, Sparkles, 
-  MessageSquare, Share2, Edit3, CheckCircle2, ChevronRight,
+  MessageSquare, Share2, Edit3, ChevronRight,
   TrendingDown, Info, Clock, FileText
 } from 'lucide-react';
 import { WhatsAppIcon } from './WhatsAppIcon';
@@ -12,7 +12,7 @@ import { formatCurrency, cn } from '../lib/utils';
 import { PrintModal } from './PrintModal';
 import { InvoiceView } from './InvoiceView';
 import { domToPng } from 'modern-screenshot';
-import { getInvoices, getProfile, updateInvoice, getPayments, getExpenses, type Profile as ProfileType } from '../lib/firestore';
+import { getInvoices, getProfile, getPayments, getExpenses, type Profile as ProfileType } from '../lib/firestore';
 import { db } from '../lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { startOfDay, subDays, isSameDay, format, endOfDay } from 'date-fns';
@@ -167,17 +167,6 @@ export function Dashboard({
   const handlePrint = (inv: Invoice) => {
     setSelectedInvoice(inv);
     setShowPrintModal(true);
-  };
-
-  const handleMarkAsPaid = async (inv: Invoice) => {
-    if (!inv.id) return;
-    await updateInvoice(inv.id, { 
-      creditAmount: 0, 
-      receivedAmount: inv.total 
-    });
-    // Refresh data
-    const invs = await getInvoices(ownerId);
-    setInvoices(invs);
   };
 
   const handleShareImage = async (inv: Invoice) => {
@@ -479,15 +468,6 @@ export function Dashboard({
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {inv.creditAmount > 0 && (
-                  <button 
-                    onClick={() => handleMarkAsPaid(inv)}
-                    className="flex-1 py-2 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-emerald-100 transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <CheckCircle2 size={12} />
-                    Mark Paid
-                  </button>
-                )}
                 <button 
                   onClick={() => handleShareImage(inv)}
                   disabled={isSharingImage === inv.id}

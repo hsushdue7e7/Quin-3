@@ -1,5 +1,5 @@
 import { useState, useEffect, Suspense, lazy } from 'react';
-import { LayoutDashboard, Package, Receipt, BarChart3, User, LogOut, Settings, Menu, X, History, Cloud, Bot, AlertTriangle, Bell, Check, Users, Maximize, Minimize } from 'lucide-react';
+import { LayoutDashboard, Package, Receipt, BarChart3, User, LogOut, Settings, Menu, X, History, Cloud, Bot, AlertTriangle, Bell, Check, Users, Maximize, Minimize, TrendingUp } from 'lucide-react';
 
 // Lazy load components
 const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
@@ -8,6 +8,7 @@ const Billing = lazy(() => import('./components/Billing').then(m => ({ default: 
 const Transactions = lazy(() => import('./components/Transactions').then(m => ({ default: m.Transactions })));
 const Customers = lazy(() => import('./components/Customers').then(m => ({ default: m.Customers })));
 const Reports = lazy(() => import('./components/Reports').then(m => ({ default: m.Reports })));
+const ProductInsights = lazy(() => import('./components/ProductInsights').then(m => ({ default: m.ProductInsights })));
 const Login = lazy(() => import('./components/Login').then(m => ({ default: m.Login })));
 const Profile = lazy(() => import('./components/Profile').then(m => ({ default: m.Profile })));
 const B2BNetwork = lazy(() => import('./components/B2BNetwork'));
@@ -111,6 +112,7 @@ function AppContent() {
   const [showPaymentModalFromDashboard, setShowPaymentModalFromDashboard] = useState(false);
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [selectedIntelligenceProductId, setSelectedIntelligenceProductId] = useState<string | null>(null);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | undefined>();
   const [initialBillingItems, setInitialBillingItems] = useState<any[] | undefined>();
   const [isCreatingQuotation, setIsCreatingQuotation] = useState(false);
@@ -203,6 +205,16 @@ function AppContent() {
             if (staffMember) {
               const isActive = staffMember.status === 'active';
               setIsInactive(!isActive);
+
+              // Link staff UID if not already linked
+              if (!staffMember.uid) {
+                const { saveStaff } = await import('./lib/firestore');
+                await saveStaff({
+                  ...staffMember,
+                  uid: firebaseUser.uid,
+                  updatedAt: Date.now()
+                });
+              }
 
               userProfile = {
                 id: firebaseUser.uid,
@@ -510,8 +522,9 @@ function AppContent() {
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 no-print">
       <header className="sticky top-0 bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 md:px-8 py-3 md:py-4 flex justify-between items-center z-40">
         <div className="flex items-center gap-2 md:gap-3">
-          <div className="w-8 h-8 md:w-10 md:h-10 bg-slate-900 rounded-lg md:rounded-xl flex items-center justify-center shadow-lg shadow-slate-200">
-            <Package size={24} className="text-white" />
+          <div className="w-8 h-8 md:w-10 md:h-10 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-lg md:rounded-xl flex items-center justify-center shadow-lg shadow-blue-200/50 relative overflow-hidden">
+            <div className="absolute -bottom-2 -left-2 w-6 h-6 bg-emerald-500/30 blur-xl" />
+            <TrendingUp size={24} className="text-white relative z-10" />
           </div>
           <div className="hidden sm:block">
             <h1 className="font-bold text-base md:text-lg tracking-tight">Quin</h1>
@@ -703,7 +716,17 @@ function AppContent() {
                     // Refresh data if needed
                   }}
                 />
-                {activeTab === 'inventory' && <Inventory user={user} ownerId={ownerId || user.uid} role={role} />}
+                {activeTab === 'inventory' && (
+                  <Inventory 
+                    user={user} 
+                    ownerId={ownerId || user.uid} 
+                    role={role} 
+                    onViewIntelligence={(id) => {
+                      setSelectedIntelligenceProductId(id);
+                      setActiveTab('reports');
+                    }}
+                  />
+                )}
                 {activeTab === 'transactions' && (
                   <Transactions user={user} ownerId={ownerId || user.uid} role={role} onEditInvoice={handleEditInvoice} />
                 )}
@@ -736,6 +759,8 @@ function AppContent() {
                   <Reports 
                     user={user} 
                     ownerId={ownerId || user.uid}
+                    initialProductId={selectedIntelligenceProductId}
+                    onClearInitialProduct={() => setSelectedIntelligenceProductId(null)}
                   />
                 )}
                 {activeTab === 'profile' && (
@@ -815,6 +840,7 @@ function AppContent() {
               onClick={() => {
                 setActiveTab(item.id as Tab);
                 if (item.id !== 'transactions') setEditingInvoiceId(undefined);
+                if (item.id !== 'reports') setSelectedIntelligenceProductId(null);
               }}
               className={cn(
                 "flex flex-col items-center gap-1 p-2 rounded-xl transition-all min-w-[64px]",

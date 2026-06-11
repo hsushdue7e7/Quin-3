@@ -15,7 +15,8 @@ import {
   MoreHorizontal,
   Printer,
   Edit2,
-  TrendingDown
+  TrendingDown,
+  Split
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion } from 'motion/react';
@@ -82,7 +83,7 @@ export function Transactions({
       creditAmount: inv.creditAmount,
       date: inv.date,
       reference: inv.invoiceNumber,
-      method: inv.creditAmount > 0 ? 'Partial' : 'Paid',
+      method: inv.paymentMethod === 'split' ? 'Split' : (inv.paymentMethod || (inv.creditAmount > 0 ? 'Partial' : 'Paid')),
       status: inv.creditAmount > 0 ? 'Partial' : 'Paid',
       staffName: inv.staffName
     })) : []),
@@ -262,6 +263,7 @@ export function Transactions({
                       {(t.method === 'Card' || t.method === 'card') && <CreditCard size={14} />}
                       {(t.method === 'UPI' || t.method === 'upi') && <Smartphone size={14} />}
                       {(t.method === 'Other' || t.method === 'other') && <MoreHorizontal size={14} />}
+                      {t.method === 'Split' && <Split size={14} />}
                       <span className="text-xs font-medium capitalize">{t.method}</span>
                     </div>
                   </td>

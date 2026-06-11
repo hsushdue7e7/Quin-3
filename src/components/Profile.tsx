@@ -4,7 +4,7 @@ import {
   Menu, X, User, Building, Mail, Phone, MapPin, Save, Camera, CheckCircle2, LogOut, 
   BarChart3, Database, AlertCircle, FileText, 
   Briefcase, Settings, Trash2, ExternalLink, Globe, CreditCard, 
-  TrendingUp, TrendingDown, Package, BadgeCheck, Edit3, ChevronRight, Plus,
+  TrendingUp, TrendingDown, Package, BadgeCheck, Edit3, ChevronRight, Plus, Signature,
   History, Lock, DollarSign, PieChart, IndianRupee, Users, Info, Upload
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -60,7 +60,7 @@ export function FullscreenToggle() {
   );
 }
 
-import { getProfile, saveProfile, type Profile as ProfileType, getBusinessProfile, getInvoices, getPayments, getExpenses, deleteBusinessData, getStaff, saveStaff, deactivateStaff } from '../lib/firestore';
+import { getProfile, saveProfile, type Profile as ProfileType, getBusinessProfile, getInvoices, getPayments, getExpenses, deleteBusinessData, getStaff, saveStaff, deactivateStaff, getActivitiesByStaff, getInvoicesByStaff, getPaymentsByStaff, getExpensesByStaff, getQuotationsByStaff } from '../lib/firestore';
 import { formatPhone, formatCurrency, cn } from '../lib/utils';
 import { db as localDb, type BusinessProfile, type Invoice, type Product, type Payment, type Expense, type Staff, UserRole } from '../db';
 import { db } from '../lib/firebase';
@@ -216,7 +216,8 @@ export function Profile({ user, ownerId, role, onLogout }: {
       state: formData.get('state') as string,
       taxPercentage,
       trackInventory: profile?.trackInventory ?? true,
-      logo: profile?.logo
+      logo: profile?.logo,
+      signatureUrl: profile?.signatureUrl
     };
 
     try {
@@ -248,6 +249,27 @@ export function Profile({ user, ownerId, role, onLogout }: {
           taxPercentage: 10,
           trackInventory: true,
           logo: reader.result as string
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSignatureChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProfile(prev => prev ? { ...prev, signatureUrl: reader.result as string } : {
+          userId: ownerId,
+          businessName: '',
+          ownerName: '',
+          email: '',
+          phone: '',
+          address: '',
+          taxPercentage: 10,
+          trackInventory: true,
+          signatureUrl: reader.result as string
         });
       };
       reader.readAsDataURL(file);
@@ -732,6 +754,27 @@ export function Profile({ user, ownerId, role, onLogout }: {
                           </select>
                         </div>
                       </div>
+
+                      <div className="space-y-4 md:col-span-2">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] ml-1">Authorized Signature</label>
+                        <div className="flex items-center gap-6 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                          <div className="w-48 h-24 bg-white rounded-lg border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+                            {profile?.signatureUrl ? (
+                              <img src={profile.signatureUrl} alt="Signature Preview" className="max-w-full max-h-full object-contain" />
+                            ) : (
+                              <Signature className="w-8 h-8 text-slate-300" />
+                            )}
+                          </div>
+                          <div className="space-y-2">
+                            <label className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors shadow-sm active:scale-95">
+                              <Camera className="w-4 h-4" />
+                              Upload Signature
+                              <input type="file" className="hidden" accept="image/*" onChange={handleSignatureChange} />
+                            </label>
+                            <p className="text-[10px] text-slate-400 font-medium">Clear image on white background</p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="pt-4 flex gap-4">
@@ -1070,6 +1113,7 @@ function StaffManagement({ ownerId, staff, onUpdate }: {
 }) {
   const [isAdding, setIsAdding] = useState(false);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
+  const [viewingActivity, setViewingActivity] = useState<Staff | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1102,6 +1146,16 @@ function StaffManagement({ ownerId, staff, onUpdate }: {
       setIsLoading(false);
     }
   };
+
+  if (viewingActivity) {
+    return (
+      <StaffActivityLog 
+        ownerId={ownerId} 
+        staff={viewingActivity} 
+        onBack={() => setViewingActivity(null)} 
+      />
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -1266,6 +1320,13 @@ function StaffManagement({ ownerId, staff, onUpdate }: {
               </div>
               <div className="flex w-full sm:w-auto gap-2 border-t sm:border-t-0 pt-4 sm:pt-0">
                 <button
+                  onClick={() => setViewingActivity(member)}
+                  className="flex-1 sm:flex-none px-4 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-xl transition-all font-bold text-sm flex items-center justify-center gap-2 active:scale-95 border border-indigo-100"
+                >
+                  <History size={16} />
+                  Activity
+                </button>
+                <button
                   onClick={() => setEditingStaff(member)}
                   className="flex-1 sm:flex-none px-4 py-2 bg-slate-50 text-slate-600 hover:bg-slate-900 hover:text-white rounded-xl transition-all font-bold text-sm flex items-center justify-center gap-2 active:scale-95 border border-slate-100"
                 >
@@ -1292,12 +1353,157 @@ function StaffManagement({ ownerId, staff, onUpdate }: {
   );
 }
 
+function StaffActivityLog({ ownerId, staff, onBack }: { 
+  ownerId: string; 
+  staff: Staff; 
+  onBack: () => void;
+}) {
+  const [activities, setActivities] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchActivity = async () => {
+      setIsLoading(true);
+      try {
+        const staffName = staff.name; 
+        const staffUid = staff.uid;
+        
+        const [logs, staffInvoices, staffPayments, staffExpenses, staffQuotations] = await Promise.all([
+          getActivitiesByStaff(ownerId, staffName, staffUid),
+          getInvoicesByStaff(ownerId, staffName, staffUid),
+          getPaymentsByStaff(ownerId, staffName, staffUid),
+          getExpensesByStaff(ownerId, staffName, staffUid),
+          getQuotationsByStaff(ownerId, staffName, staffUid)
+        ]);
+
+        const transactions = [
+          ...staffInvoices.map(inv => ({
+            id: inv.id,
+            timestamp: inv.date,
+            action: `Created invoice ${inv.invoiceNumber}`,
+            details: `Customer: ${inv.customerName}, Amount: ${formatCurrency(inv.total)}`,
+            type: 'invoice' as const
+          })),
+          ...staffQuotations.map(q => ({
+            id: q.id,
+            timestamp: q.date,
+            action: `Created quotation ${q.invoiceNumber}`,
+            details: `Customer: ${q.customerName}, Amount: ${formatCurrency(q.total)}`,
+            type: 'invoice' as const
+          })),
+          ...staffPayments.map(p => ({
+            id: p.id,
+            timestamp: p.date,
+            action: `Recorded payment of ${formatCurrency(p.amount)}`,
+            details: `Customer: ${p.customerName}, Method: ${p.method}`,
+            type: 'payment' as const
+          })),
+          ...staffExpenses.map(e => ({
+            id: e.id,
+            timestamp: e.date,
+            action: `Added expense: ${e.category}`,
+            details: `Amount: ${formatCurrency(e.amount)}, ${e.description}`,
+            type: 'expense' as const
+          }))
+        ];
+
+        const combined = [
+          ...logs,
+          ...transactions
+        ].sort((a, b) => b.timestamp - a.timestamp);
+
+        setActivities(combined);
+      } catch (err) {
+        console.error('Error fetching staff activity:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchActivity();
+  }, [ownerId, staff.name, staff.uid]);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <button 
+          onClick={onBack}
+          className="flex items-center gap-2 text-slate-500 hover:text-slate-900 transition-colors font-medium border border-slate-200 px-4 py-2 rounded-xl bg-white shadow-sm"
+        >
+          <X size={18} />
+          Back to Staff
+        </button>
+        <div className="text-right">
+          <h3 className="text-xl font-bold text-slate-900">{staff.name}'s Activity</h3>
+          <p className="text-xs text-slate-500 font-medium">{staff.email}</p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center gap-3">
+          <History size={20} className="text-slate-600" />
+          <h4 className="font-bold text-slate-900">Activity & Transaction Log</h4>
+        </div>
+        
+        <div className="divide-y divide-slate-100">
+          {isLoading ? (
+            <div className="p-12 text-center text-slate-400">
+              <div className="w-8 h-8 border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4" />
+              <p className="font-medium">Loading history...</p>
+            </div>
+          ) : activities.length > 0 ? (
+            activities.map((item, i) => (
+              <div key={i} className="p-6 hover:bg-slate-50 transition-colors flex gap-5 items-start">
+                <div className={cn(
+                  "w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm border",
+                  item.type === 'invoice' ? "bg-indigo-50 text-indigo-600 border-indigo-100" :
+                  item.type === 'payment' ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
+                  item.type === 'expense' ? "bg-rose-50 text-rose-600 border-rose-100" :
+                  "bg-amber-50 text-amber-600 border-amber-100"
+                )}>
+                  {item.type === 'invoice' ? <FileText size={20} /> :
+                   item.type === 'payment' ? <IndianRupee size={20} /> :
+                   item.type === 'expense' ? <TrendingDown size={20} /> :
+                   <Package size={20} />}
+                </div>
+                <div className="flex-1 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <h5 className="font-bold text-slate-900">{item.action}</h5>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{format(item.timestamp, 'dd MMM, hh:mm a')}</span>
+                  </div>
+                  <p className="text-sm text-slate-500 leading-relaxed">{item.details}</p>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="p-12 text-center text-slate-400">
+              <History size={48} className="mx-auto opacity-20 mb-3" />
+              <p className="font-medium">No activity recorded for this staff member.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StaffProfileView({ user, profile, currentStaff, onLogout }: {
   user: FirebaseUser;
   profile: ProfileType | null;
   currentStaff?: Staff;
   onLogout: () => void;
 }) {
+  const [showLog, setShowLog] = useState(false);
+
+  if (showLog && currentStaff) {
+    return (
+      <StaffActivityLog 
+        ownerId={currentStaff.userId} 
+        staff={currentStaff} 
+        onBack={() => setShowLog(false)} 
+      />
+    );
+  }
+
   return (
     <div className="space-y-8 max-w-3xl mx-auto">
       <div className="relative overflow-hidden bg-white rounded-[2.5rem] p-8 md:p-10 shadow-lg border border-slate-200">
@@ -1353,18 +1559,27 @@ function StaffProfileView({ user, profile, currentStaff, onLogout }: {
             <Lock size={20} />
           </div>
           <div>
-            <h3 className="font-bold text-slate-900 text-lg leading-none mb-1">Account Actions</h3>
-            <p className="text-xs text-slate-500 font-medium">Manage your session securely</p>
+            <h3 className="font-bold text-slate-900 text-lg leading-none mb-1">Account & History</h3>
+            <p className="text-xs text-slate-500 font-medium">Manage your session and view your activity</p>
           </div>
         </div>
         
-        <button
-          onClick={onLogout}
-          className="w-full py-4 bg-slate-50 text-slate-700 rounded-2xl font-bold hover:bg-slate-100 transition-all flex items-center justify-center gap-3 border border-slate-200 group mt-4 active:scale-95"
-        >
-          <LogOut size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
-          Logout from Device
-        </button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+          <button
+            onClick={() => setShowLog(true)}
+            className="py-4 bg-indigo-50 text-indigo-700 rounded-2xl font-bold hover:bg-indigo-100 transition-all flex items-center justify-center gap-3 border border-indigo-100 group active:scale-95"
+          >
+            <History size={18} className="text-indigo-400 group-hover:text-indigo-600 transition-colors" />
+            View My Activity
+          </button>
+          <button
+            onClick={onLogout}
+            className="py-4 bg-slate-50 text-slate-700 rounded-2xl font-bold hover:bg-slate-100 transition-all flex items-center justify-center gap-3 border border-slate-200 group active:scale-95"
+          >
+            <LogOut size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
+            Logout from Device
+          </button>
+        </div>
       </div>
     </div>
   );
