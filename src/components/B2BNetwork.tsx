@@ -75,7 +75,6 @@ import { twMerge } from 'tailwind-merge';
 import BusinessProfileView from './BusinessProfileView';
 import BusinessProfileForm from './BusinessProfileForm';
 import SellerProducts from './SellerProducts';
-import { PRODUCT_CATEGORIES } from '../constants/categories';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -178,6 +177,21 @@ export default function B2BNetwork({ ownerId, onGenerateInvoice }: B2BNetworkPro
   const [replyQuoteDeliveryTime, setReplyQuoteDeliveryTime] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
   const [filterCategory, setFilterCategory] = useState('');
+  const [b2bCategories, setB2bCategories] = useState<string[]>([]);
+
+  useEffect(() => {
+    const fetchB2bCategories = async () => {
+      try {
+        const catSnapshot = await getDocs(collection(db, 'categories'));
+        const names = catSnapshot.docs.map(doc => doc.data().name as string).filter(Boolean);
+        const uniqueNames = Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
+        setB2bCategories(uniqueNames);
+      } catch (err) {
+        console.error('Error fetching B2B categories', err);
+      }
+    };
+    fetchB2bCategories();
+  }, []);
   const [filterMinPrice, setFilterMinPrice] = useState('');
   const [filterMaxPrice, setFilterMaxPrice] = useState('');
   const [filterLocation, setFilterLocation] = useState('');
@@ -1409,8 +1423,8 @@ export default function B2BNetwork({ ownerId, onGenerateInvoice }: B2BNetworkPro
                       className="w-full px-3 py-2 border rounded-lg bg-white text-sm outline-none focus:ring-2 focus:ring-indigo-500"
                     >
                       <option value="">All Categories</option>
-                      {PRODUCT_CATEGORIES.map(cat => (
-                        <option key={cat.id} value={cat.id}>{cat.label}</option>
+                      {b2bCategories.map(catName => (
+                        <option key={catName} value={catName}>{catName}</option>
                       ))}
                     </select>
                   </div>
@@ -1549,16 +1563,16 @@ export default function B2BNetwork({ ownerId, onGenerateInvoice }: B2BNetworkPro
                 <div>
                   <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Suggested Categories</h4>
                   <div className="flex flex-wrap justify-center gap-3">
-                    {PRODUCT_CATEGORIES.slice(0, 8).map(cat => (
+                    {b2bCategories.slice(0, 8).map(catName => (
                       <button
-                        key={cat.id}
+                        key={catName}
                         onClick={() => {
-                          setFilterCategory(cat.id);
+                          setFilterCategory(catName);
                           handleDiscoverySearch();
                         }}
                         className="px-4 py-2 bg-white border rounded-lg hover:border-indigo-500 hover:text-indigo-600 transition-all shadow-sm flex items-center gap-2"
                       >
-                        {cat.label}
+                        {catName}
                         <ArrowRight className="w-3 h-3" />
                       </button>
                     ))}

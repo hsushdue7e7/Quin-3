@@ -15,6 +15,7 @@ export interface Product {
   secondaryUnit?: string;
   conversionRate?: number;
   category: string;
+  categoryId?: string;
   minStock: number;
   trackInventory: boolean;
   createdAt: number;
@@ -312,6 +313,14 @@ export interface Staff {
   updatedAt: number;
 }
 
+export interface Category {
+  id?: string;
+  userId: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export class QuinDatabase extends Dexie {
   products!: Table<Product>;
   invoices!: Table<Invoice>;
@@ -320,6 +329,7 @@ export class QuinDatabase extends Dexie {
   profile!: Table<Profile>;
   expenses!: Table<Expense>;
   backups!: Table<BackupRecord>;
+  categories!: Table<Category>;
 
   constructor() {
     super('QuinDB');
@@ -344,6 +354,9 @@ export class QuinDatabase extends Dexie {
     });
     this.version(7).stores({
       backups: '++id, userId, date'
+    });
+    this.version(8).stores({
+      categories: '++id, userId, name, createdAt'
     });
   }
 }

@@ -4,12 +4,13 @@ import {
   AlertCircle, TrendingUp, Info,
   Plus, Trash2, Loader2, Barcode, Shield,
   Clock, Calendar, Users, AppWindow, Scan, Sparkles,
-  Zap, ArrowRight
+  Zap, ArrowRight, Search, Pencil
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, formatCurrency } from '../lib/utils';
-import { type Product } from '../db';
-import { PRODUCT_CATEGORIES } from '../constants/categories';
+import { type Product, db as localDb, type Category } from '../db';
+import { db } from '../lib/firebase';
+import { collection, query, where, getDocs, doc, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 
 interface ProductFormProps {
   initialData?: Product | null;
@@ -35,6 +36,302 @@ export function ProductForm({ initialData, ownerId, onSave, onClose, isSaving }:
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+
+  // CUSTOM USER-CONTROLLED CATEGORIES ENGINE
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [renamingCategory, setRenamingCategory] = useState<Category | null>(null);
+  const [renameInput, setRenameInput] = useState('');
+  const [catSearch, setCatSearch] = useState('');
+  const [isSubmittingCategory, setIsSubmittingCategory] = useState(false);
+
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const fetchCategories = async () => {
+    try {
+      setIsLoadingCategories(true);
+      // Query categories collection from Firestore (realtime/reliable)
+      const q = query(collection(db, 'categories'), where('userId', '==', ownerId));
+      const snapshot = await getDocs(q);
+      const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
+      
+      // Sync into local Dexie categories table as well
+      for (const cat of fetched) {
+        try {
+          const exists = await localDb.categories.get(cat.id!);
+          if (!exists) {
+            await localDb.categories.add(cat);
+          }
+        } catch (dexieErr) {
+          console.error('Local db categories cache sync failed', dexieErr);
+        }
+      }
+      
+      setCategories(fetched);
+    } catch (e) {
+      console.error('Failed to load categories, trying local Dexie database...', e);
+      try {
+        const localCats = await localDb.categories.where('userId').equals(ownerId).toArray();
+        setCategories(localCats);
+      } catch (localErr) {
+        console.error('Local Dexie query failed', localErr);
+      }
+    } finally {
+      setIsLoadingCategories(false);
+    }
+  };
+
+  useEffect(() => {
+    if (ownerId) {
+      fetchCategories();
+    }
+  }, [ownerId]);
+
+  const handleSelectCategory = (catId: string, catName: string) => {
+    setFormData(prev => ({
+      ...prev,
+      category: catName,
+      categoryId: catId
+    }));
+    if (errors.category) {
+      setErrors(prev => {
+        const next = { ...prev };
+        delete next.category;
+        return next;
+      });
+    }
+  };
+
+  const handleCreateCategory = async () => {
+    if (!newCatName.trim()) return;
+    const catName = newCatName.trim();
+    
+    // Check duplicates
+    if (categories.some(c => c.name.toLowerCase() === catName.toLowerCase())) {
+      alert('A category with this name already exists.');
+      return;
+    }
+
+    try {
+      setIsSubmittingCategory(true);
+      // 1. Add to Firestore
+      const categoryRef = await addDoc(collection(db, 'categories'), {
+        userId: ownerId,
+        name: catName,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      });
+
+      const newCat: Category = {
+        id: categoryRef.id,
+        userId: ownerId,
+        name: catName,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+
+      // 2. Add to Local DB
+      try {
+        await localDb.categories.add(newCat);
+      } catch (localErr) {
+        console.error('Failed to cache category locally:', localErr);
+      }
+
+      // Update state list
+      setCategories(prev => {
+        const updated = [...prev, newCat];
+        updated.sort((a, b) => a.name.localeCompare(b.name));
+        return updated;
+      });
+
+      // Auto-select
+      handleSelectCategory(categoryRef.id, catName);
+      trackCategoryUsage(categoryRef.id);
+
+      // Clean up inputs
+      setNewCatName('');
+      setIsCreateModalOpen(false);
+    } catch (e) {
+      console.error('Failed to create category:', e);
+      alert('Failed to save new category.');
+    } finally {
+      setIsSubmittingCategory(false);
+    }
+  };
+
+  const checkIfCategoryIsUsed = async (catId: string, catName: string) => {
+    try {
+      const q = query(collection(db, 'products'), where('userId', '==', ownerId));
+      const snapshot = await getDocs(q);
+      const isUsed = snapshot.docs.some(doc => {
+        const d = doc.data();
+        return d.categoryId === catId || d.category === catName;
+      });
+      return isUsed;
+    } catch (err) {
+      console.error('Error checking category usage:', err);
+      try {
+        const localCount = await localDb.products
+          .where('userId')
+          .equals(ownerId)
+          .filter(p => p.categoryId === catId || p.category === catName)
+          .count();
+        return localCount > 0;
+      } catch (dbErr) {
+        return false;
+      }
+    }
+  };
+
+  const handleRenameClick = (cat: Category) => {
+    setRenamingCategory(cat);
+    setRenameInput(cat.name);
+  };
+
+  const handleRenameSave = async () => {
+    if (!renamingCategory || !renameInput.trim()) return;
+    const newName = renameInput.trim();
+    if (newName.toLowerCase() === renamingCategory.name.toLowerCase()) {
+      setRenamingCategory(null);
+      return;
+    }
+
+    if (categories.some(c => c.id !== renamingCategory.id && c.name.toLowerCase() === newName.toLowerCase())) {
+      alert('A category with this name already exists.');
+      return;
+    }
+
+    try {
+      const catId = renamingCategory.id!;
+      const docRef = doc(db, 'categories', catId);
+      
+      await updateDoc(docRef, {
+        name: newName,
+        updatedAt: Date.now()
+      });
+
+      try {
+        await localDb.categories.update(catId, {
+          name: newName,
+          updatedAt: Date.now()
+        });
+      } catch (localErr) {
+        console.error('Failed to rename category locally:', localErr);
+      }
+
+      setCategories(prev => prev.map(c => c.id === catId ? { ...c, name: newName, updatedAt: Date.now() } : c));
+
+      if (formData.categoryId === catId) {
+        setFormData(prev => ({ ...prev, category: newName }));
+      }
+
+      // Synchronize in products
+      const productsQ = query(collection(db, 'products'), where('userId', '==', ownerId), where('categoryId', '==', catId));
+      const snapshot = await getDocs(productsQ);
+      const batchPromises = snapshot.docs.map(d => updateDoc(doc(db, 'products', d.id), { category: newName, updatedAt: Date.now() }));
+      await Promise.all(batchPromises);
+
+      try {
+        await localDb.products
+          .where('categoryId')
+          .equals(catId)
+          .modify({ category: newName, updatedAt: Date.now() });
+      } catch (localErr) {
+        console.error('Failed to rename product categories locally:', localErr);
+      }
+
+      setRenamingCategory(null);
+    } catch (e) {
+      console.error('Failed to rename category:', e);
+      alert('Failed to rename category.');
+    }
+  };
+
+  const handleDeleteClick = async (cat: Category) => {
+    if (!cat.id) return;
+    const confirmDelete = window.confirm(`Are you sure you want to delete category "${cat.name}"?`);
+    if (!confirmDelete) return;
+
+    const isUsed = await checkIfCategoryIsUsed(cat.id, cat.name);
+    if (isUsed) {
+      alert(`Cannot delete category "${cat.name}". There are products assigned to this category. Please move or delete the products first.`);
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, 'categories', cat.id));
+      
+      try {
+        await localDb.categories.delete(cat.id);
+      } catch (localErr) {
+        console.error('Failed to delete category locally:', localErr);
+      }
+
+      setCategories(prev => prev.filter(c => c.id !== cat.id));
+
+      if (formData.categoryId === cat.id) {
+        setFormData(prev => ({ ...prev, category: undefined, categoryId: undefined }));
+      }
+    } catch (e) {
+      console.error('Failed to delete category:', e);
+      alert('Error deleting category.');
+    }
+  };
+
+  const trackCategoryUsage = (catId: string) => {
+    let recentIds = JSON.parse(localStorage.getItem(`recent_cats_${ownerId}`) || '[]');
+    recentIds = recentIds.filter((id: string) => id !== catId);
+    recentIds.unshift(catId);
+    recentIds = recentIds.slice(0, 3);
+    localStorage.setItem(`recent_cats_${ownerId}`, JSON.stringify(recentIds));
+  };
+
+  const sortedFilteredCats = useMemo(() => {
+    const recentIds = JSON.parse(localStorage.getItem(`recent_cats_${ownerId}`) || '[]');
+    const filtered = categories.filter(c => c.name.toLowerCase().includes(catSearch.toLowerCase()));
+    
+    const recentCats: Category[] = [];
+    const otherCats: Category[] = [];
+    
+    filtered.forEach(cat => {
+      if (recentIds.includes(cat.id)) {
+        recentCats.push(cat);
+      } else {
+        otherCats.push(cat);
+      }
+    });
+    
+    recentCats.sort((a, b) => {
+      const idxA = recentIds.indexOf(a.id);
+      const idxB = recentIds.indexOf(b.id);
+      return idxA - idxB;
+    });
+    
+    otherCats.sort((a, b) => a.name.localeCompare(b.name));
+    
+    return [...recentCats, ...otherCats];
+  }, [categories, catSearch, ownerId]);
+
+  const isRecentId = (id?: string) => {
+    if (!id) return false;
+    const recentIds = JSON.parse(localStorage.getItem(`recent_cats_${ownerId}`) || '[]');
+    return recentIds.includes(id);
+  };
 
   // Profit calculations
   const profit = useMemo(() => {
@@ -119,7 +416,8 @@ export function ProductForm({ initialData, ownerId, onSave, onClose, isSaving }:
       primaryUnit: formData.primaryUnit || (formData.type === 'service' ? 'Hour' : 'Pcs'),
       secondaryUnit: formData.type === 'product' ? formData.secondaryUnit : undefined,
       conversionRate: formData.type === 'product' ? formData.conversionRate : undefined,
-      category: formData.category || 'other',
+      category: formData.category || 'Other',
+      categoryId: formData.categoryId || '',
       minStock: formData.type === 'product' ? (formData.minStock || 0) : 0,
       trackInventory: formData.type === 'product' ? !!formData.trackInventory : false,
       attributes: formData.attributes || {},
@@ -133,7 +431,7 @@ export function ProductForm({ initialData, ownerId, onSave, onClose, isSaving }:
     await onSave(finalData);
   };
 
-  const categoryDef = PRODUCT_CATEGORIES.find(c => c.id === formData.category);
+  const categoryDef = undefined;
 
   return (
     <motion.div 
@@ -299,23 +597,122 @@ export function ProductForm({ initialData, ownerId, onSave, onClose, isSaving }:
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-slate-600 ml-1">Category *</label>
-                    <div className="relative group">
-                      <Layers className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                      <select 
-                        name="category"
-                        value={formData.category || ''}
-                        onChange={(e) => handleChange('category', e.target.value)}
-                        className={cn(
-                          "w-full pl-12 pr-4 py-3.5 bg-slate-50 border-slate-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 appearance-none transition-all outline-none",
-                          errors.category && "border-rose-300"
+                    <div className="relative" ref={dropdownRef}>
+                      <div className="relative group">
+                        <Layers className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                        <button
+                          type="button"
+                          onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                          className={cn(
+                            "w-full pl-12 pr-10 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium text-left flex items-center justify-between focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none",
+                            errors.category && "border-rose-300"
+                          )}
+                        >
+                          <span className="truncate">{formData.category || 'Select Category'}</span>
+                          <ChevronDown className="text-slate-400 shrink-0 select-none pointer-events-none" size={18} />
+                        </button>
+                      </div>
+
+                      {/* DROPDOWN OPTIONS LIST */}
+                      <AnimatePresence>
+                        {isDropdownOpen && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 10 }}
+                            className="absolute left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden flex flex-col max-h-80"
+                          >
+                            {/* Search box inside the dropdown */}
+                            <div className="p-2 border-b border-slate-100 sticky top-0 bg-white z-10 flex items-center gap-2">
+                              <Search className="text-slate-400 shrink-0 ml-2" size={16} />
+                              <input
+                                type="text"
+                                placeholder="Search category..."
+                                value={catSearch}
+                                onChange={(e) => setCatSearch(e.target.value)}
+                                className="w-full py-2 pr-3 bg-transparent text-sm font-medium border-none focus:outline-none placeholder-slate-400 outline-none"
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            </div>
+
+                            {/* Dropdown Scroll Area */}
+                            <div className="overflow-y-auto py-1 flex-1 max-h-48 scrollbar-thin">
+                              {sortedFilteredCats.length === 0 ? (
+                                <div className="px-4 py-6 text-center text-xs text-slate-400 font-medium">
+                                  No categories found
+                                </div>
+                              ) : (
+                                sortedFilteredCats.map((cat, idx) => {
+                                  const isRecentlyUsed = isRecentId(cat.id);
+                                  return (
+                                    <div
+                                      key={cat.id || idx}
+                                      onClick={() => {
+                                        if (cat.id) {
+                                          handleSelectCategory(cat.id, cat.name);
+                                          trackCategoryUsage(cat.id);
+                                          setIsDropdownOpen(false);
+                                          setCatSearch('');
+                                        }
+                                      }}
+                                      className={cn(
+                                        "group/item px-4 py-2.5 hover:bg-slate-50 text-sm font-semibold text-slate-700 flex items-center justify-between cursor-pointer transition-colors relative",
+                                        formData.categoryId === cat.id && "bg-indigo-50/40 text-indigo-600"
+                                      )}
+                                    >
+                                      <div className="flex items-center gap-2 min-w-0 pr-12">
+                                        <Layers size={14} className="text-slate-400 shrink-0" />
+                                        <span className="truncate">{cat.name}</span>
+                                        {isRecentlyUsed && (
+                                          <span className="text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider scale-90 shrink-0">
+                                            Recent
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      {/* Row Action Buttons (✏️ 🗑️) */}
+                                      <div 
+                                        className="absolute right-3 flex items-center gap-1 opacity-0 group-hover/item:opacity-100 transition-opacity bg-gradient-to-l from-slate-50 pl-4 py-1"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRenameClick(cat)}
+                                          className="p-1 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-slate-100 transition-all"
+                                        >
+                                          <Pencil size={14} />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteClick(cat)}
+                                          className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-all"
+                                        >
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+
+                            {/* bottom banner / inline create shortcut */}
+                            <div className="border-t border-slate-100 p-1.5 bg-slate-50 sticky bottom-0">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsDropdownOpen(false);
+                                  setIsCreateModalOpen(true);
+                                }}
+                                className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-white hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-indigo-600 hover:text-indigo-700 rounded-xl text-xs font-bold transition-all shadow-sm"
+                              >
+                                <Plus size={14} />
+                                Create New Category
+                              </button>
+                            </div>
+                          </motion.div>
                         )}
-                      >
-                        <option value="">Select Category</option>
-                        {PRODUCT_CATEGORIES.map(cat => (
-                          <option key={cat.id} value={cat.id}>{cat.label}</option>
-                        ))}
-                      </select>
-                      <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
+                      </AnimatePresence>
                     </div>
                   </div>
 
@@ -702,6 +1099,156 @@ export function ProductForm({ initialData, ownerId, onSave, onClose, isSaving }:
             )}
           </button>
         </div>
+
+        {/* CREATE CATEGORY MODAL */}
+        <AnimatePresence>
+          {isCreateModalOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[110] flex items-center justify-center p-4 shadow-2xl"
+              onClick={() => setIsCreateModalOpen(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, y: 10 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 10 }}
+                className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl flex flex-col gap-4 relative z-[120]"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                      <Layers size={18} />
+                    </div>
+                    <h3 className="font-bold text-slate-900">Create New Category</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateModalOpen(false)}
+                    className="p-1.5 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-all"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 ml-1">Category Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Paints, Hardware, Tools..."
+                    value={newCatName}
+                    onChange={(e) => setNewCatName(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleCreateCategory();
+                      }
+                    }}
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-3 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewCatName('');
+                      setIsCreateModalOpen(false);
+                    }}
+                    className="px-4 py-2.5 text-slate-500 font-bold text-xs hover:bg-slate-50 rounded-xl transition-all uppercase tracking-wider"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCreateCategory}
+                    disabled={isSubmittingCategory || !newCatName.trim()}
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white font-bold text-xs rounded-xl transition-all uppercase tracking-wider flex items-center gap-2"
+                  >
+                    {isSubmittingCategory ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      'Create'
+                    )}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* RENAME CATEGORY MODAL */}
+        <AnimatePresence>
+          {renamingCategory && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[110] flex items-center justify-center p-4 shadow-2xl"
+              onClick={() => setRenamingCategory(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, y: 10 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 10 }}
+                className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl flex flex-col gap-4 relative z-[120]"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                      <Pencil size={18} />
+                    </div>
+                    <h3 className="font-bold text-slate-900">Rename Category</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRenamingCategory(null)}
+                    className="p-1.5 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-all"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 ml-1">Category Name</label>
+                  <input
+                    type="text"
+                    value={renameInput}
+                    onChange={(e) => setRenameInput(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleRenameSave();
+                      }
+                    }}
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-3 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setRenamingCategory(null)}
+                    className="px-4 py-2.5 text-slate-500 font-bold text-xs hover:bg-slate-50 rounded-xl transition-all uppercase tracking-wider"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRenameSave}
+                    disabled={!renameInput.trim()}
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white font-bold text-xs rounded-xl transition-all uppercase tracking-wider"
+                  >
+                    Rename
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </motion.div>
   );

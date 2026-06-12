@@ -2,7 +2,7 @@ import { db, auth, storage } from './firebase';
 import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, addDoc, deleteDoc, onSnapshot, orderBy, limit, serverTimestamp, writeBatch, arrayUnion, increment, or, and } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import imageCompression from 'browser-image-compression';
-import { type Invoice, type Payment, type User, type Connection, type B2BOrder, type Product, type Inquiry, type BusinessProfile, type Review, type PopularSearch, type Expense, type Staff } from '../db';
+import { type Invoice, type Payment, type User, type Connection, type B2BOrder, type Product, type Inquiry, type BusinessProfile, type Review, type PopularSearch, type Expense, type Staff, type Category } from '../db';
 
 export enum OperationType {
   CREATE = 'create',
@@ -217,6 +217,51 @@ export const deleteInventoryProduct = async (productId: string) => {
     console.log(`Successfully deleted inventory product ${productId}`);
   } catch (error) {
     console.error(`Error in deleteInventoryProduct for ${path}:`, error);
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+};
+
+export const getCategories = async (userId: string): Promise<Category[]> => {
+  const path = 'categories';
+  try {
+    const q = query(collection(db, path), where('userId', '==', userId));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+    return [];
+  }
+};
+
+export const saveCategory = async (category: Category) => {
+  const path = 'categories';
+  try {
+    const cleanData = sanitizeData(category);
+    if (category.id) {
+      const docRef = doc(db, path, category.id);
+      await withTimeout(
+        setDoc(docRef, { ...cleanData, updatedAt: Date.now() }, { merge: true }),
+        `WRITE ${path}/${category.id}`
+      );
+    } else {
+      await withTimeout(
+        addDoc(collection(db, path), { ...cleanData, createdAt: Date.now(), updatedAt: Date.now() }),
+        `CREATE ${path}`
+      );
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+};
+
+export const deleteCategory = async (categoryId: string) => {
+  const path = `categories/${categoryId}`;
+  try {
+    await withTimeout(
+      deleteDoc(doc(db, 'categories', categoryId)),
+      `DELETE ${path}`
+    );
+  } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
   }
 };
@@ -903,6 +948,7 @@ export const deleteBusinessData = async (userId: string) => {
   const collectionsToDelete = [
     'products',
     'b2b_products',
+    'categories',
     'invoices',
     'quotations',
     'payments',

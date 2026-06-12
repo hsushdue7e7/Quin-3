@@ -83,12 +83,25 @@
         "stock": { "type": "number" },
         "primaryUnit": { "type": "string" },
         "category": { "type": "string" },
+        "categoryId": { "type": "string" },
         "trackInventory": { "type": "boolean" },
         "isPublic": { "type": "boolean" },
         "imageUrl": { "type": "string" },
         "description": { "type": "string" }
       },
       "required": ["userId", "name", "price"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Customizable product categories.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["userId", "name"]
     },
     "Invoice": {
       "title": "Invoice",
@@ -249,6 +262,7 @@
     "business_profiles": { "schema": "BusinessProfile", "description": "Public business profiles" },
     "products": { "schema": "Product", "description": "Inventory products" },
     "b2b_products": { "schema": "Product", "description": "Wholesale products" },
+    "categories": { "schema": "Category", "description": "Customizable categories" },
     "invoices": { "schema": "Invoice", "description": "Sales invoices" },
     "quotations": { "schema": "Invoice", "description": "Quotes" },
     "payments": { "schema": "Payment", "description": "Payment records" },

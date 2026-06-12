@@ -4,7 +4,6 @@ import { type Product } from '../db';
 import { saveProductFirestore, deleteProductFirestore, uploadImage } from '../lib/firestore';
 import { auth, db } from '../lib/firebase';
 import { collection, query, where, getDocs, doc } from 'firebase/firestore';
-import { PRODUCT_CATEGORIES } from '../constants/categories';
 
 interface SellerProductsProps {
   products: Product[];
@@ -22,6 +21,21 @@ export default function SellerProducts({ products, onProductsChange }: SellerPro
   const [showImportModal, setShowImportModal] = useState(false);
   const [inventoryProducts, setInventoryProducts] = useState<Product[]>([]);
   const [importLoading, setImportLoading] = useState(false);
+  const [categories, setCategories] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      if (!auth.currentUser) return;
+      try {
+        const q = query(collection(db, 'categories'), where('userId', '==', auth.currentUser.uid));
+        const snapshot = await getDocs(q);
+        setCategories(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } catch (e) {
+        console.error('Error fetching categories:', e);
+      }
+    };
+    fetchCategories();
+  }, [isEditing]);
 
   const fetchInventory = async () => {
     if (!auth.currentUser) return;
@@ -334,55 +348,11 @@ export default function SellerProducts({ products, onProductsChange }: SellerPro
                 className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
               >
                 <option value="">Select Category</option>
-                {PRODUCT_CATEGORIES.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.label}</option>
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.name}>{cat.name}</option>
                 ))}
               </select>
             </div>
-
-            {/* Dynamic Category Fields */}
-            {editingProduct?.category && (
-              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50 p-4 rounded-xl border border-gray-100">
-                <div className="md:col-span-2">
-                  <h3 className="text-sm font-bold text-gray-900 mb-2">Category Specific Details</h3>
-                </div>
-                {PRODUCT_CATEGORIES.find(c => c.id === editingProduct.category)?.fields.map(field => (
-                  <div key={field.name} className="space-y-2">
-                    <label className="text-sm font-semibold text-gray-700">
-                      {field.label} {field.required && '*'}
-                    </label>
-                    {field.type === 'select' ? (
-                      <select
-                        required={field.required}
-                        value={editingProduct.attributes?.[field.name] || ''}
-                        onChange={e => setEditingProduct(prev => ({
-                          ...prev,
-                          attributes: { ...prev?.attributes, [field.name]: e.target.value }
-                        }))}
-                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
-                      >
-                        <option value="">Select {field.label}</option>
-                        {field.options?.map(opt => (
-                          <option key={opt} value={opt}>{opt}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        type={field.type}
-                        required={field.required}
-                        value={editingProduct.attributes?.[field.name] || ''}
-                        onChange={e => setEditingProduct(prev => ({
-                          ...prev,
-                          attributes: { ...prev?.attributes, [field.name]: e.target.value }
-                        }))}
-                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                        placeholder={`Enter ${field.label.toLowerCase()}`}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
 
             <div className="space-y-2">
               <label className="text-sm font-semibold text-gray-700">Price (₹) *</label>
@@ -718,7 +688,7 @@ export default function SellerProducts({ products, onProductsChange }: SellerPro
                   <div>
                     <h3 className="font-semibold text-gray-900 line-clamp-1">{product.name}</h3>
                     <p className="text-xs font-medium text-indigo-600">
-                      {PRODUCT_CATEGORIES.find(c => c.id === product.category)?.label || product.category}
+                      {product.category}
                     </p>
                   </div>
                   <div className="flex gap-1">
@@ -747,7 +717,7 @@ export default function SellerProducts({ products, onProductsChange }: SellerPro
                     {Object.entries(product.attributes).slice(0, 4).map(([key, value]) => (
                       <div key={key} className="flex flex-col">
                         <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
-                          {PRODUCT_CATEGORIES.find(c => c.id === product.category)?.fields.find(f => f.name === key)?.label || key}
+                          {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()) || key}
                         </span>
                         <span className="text-xs text-gray-700 font-medium truncate">{String(value)}</span>
                       </div>

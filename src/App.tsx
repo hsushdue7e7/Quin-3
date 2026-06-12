@@ -1056,7 +1056,7 @@ function AppContent() {
 
       {appMode === 'quin' && !isInactive && (
         <nav className="flex md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 py-2 justify-around items-center no-print z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-          {navigation.map((item) => (
+          {navigation.filter(item => item.id !== 'sales' && item.id !== 'quotations').map((item) => (
             <button
               key={item.id}
               onClick={() => {

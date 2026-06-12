@@ -6,7 +6,7 @@ const MAX_BACKUPS = 30; // Keep last 30 backups
 const AUTO_BACKUP_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
 
 export async function createBackup(userId: string, type: 'auto' | 'manual' = 'manual'): Promise<BackupRecord> {
-  const tables = ['products', 'invoices', 'payments', 'profile', 'expenses'];
+  const tables = ['products', 'invoices', 'payments', 'profile', 'expenses', 'categories'];
   const exportData: any = {
     version: 1,
     timestamp: Date.now(),
@@ -57,7 +57,7 @@ export async function restoreFromBackup(backupId: number, userId: string) {
   const tables = Object.keys(data.tables);
   
   // Transactional import (as much as possible)
-  await db.transaction('rw', [db.products, db.invoices, db.payments, db.profile, db.expenses], async () => {
+  await db.transaction('rw', [db.products, db.invoices, db.payments, db.profile, db.expenses, db.categories], async () => {
     for (const table of tables) {
       if ((db as any)[table]) {
         // Delete existing for this user
@@ -163,7 +163,7 @@ export async function importFromFile(file: File, userId: string): Promise<Backup
 
 // Compatibility exports for sync.tsx
 export async function exportDatabase(userId: string): Promise<string> {
-  const tables = ['products', 'invoices', 'payments', 'profile', 'expenses'];
+  const tables = ['products', 'invoices', 'payments', 'profile', 'expenses', 'categories'];
   const exportData: any = {
     version: 1,
     timestamp: Date.now(),
@@ -184,7 +184,7 @@ export async function importDatabase(userId: string, jsonString: string) {
   if (!data.tables) throw new Error('Invalid database format');
 
   const tables = Object.keys(data.tables);
-  await db.transaction('rw', [db.products, db.invoices, db.payments, db.profile, db.expenses], async () => {
+  await db.transaction('rw', [db.products, db.invoices, db.payments, db.profile, db.expenses, db.categories], async () => {
     for (const table of tables) {
       if ((db as any)[table]) {
         const existingIds = await (db as any)[table].where('userId').equals(userId).primaryKeys();

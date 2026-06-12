@@ -8,7 +8,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import { detectAndParseFile, backupData, detectDuplicates, type ImportData } from '../lib/importUtils';
 import { saveInventoryProduct, saveInvoicesBatch, savePaymentsBatch } from '../lib/firestore';
 import { cn } from '../lib/utils';
-import { type Product, type Invoice, type Payment } from '../db';
+import { type Product, type Invoice, type Payment, db as localDb } from '../db';
+import { db } from '../lib/firebase';
+import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
 
 interface DataImportProps {
   ownerId: string;
@@ -64,6 +66,18 @@ export function DataImport({ ownerId, onComplete }: DataImportProps) {
       // 1. Auto-create backup of current data
       console.log('Creating pre-import backup...');
       await backupData(ownerId);
+
+      // Load existing categories to avoid duplicates
+      console.log('Fetching existing customizable categories...');
+      const catQ = query(collection(db, 'categories'), where('userId', '==', ownerId));
+      const catSnapshot = await getDocs(catQ);
+      const existingCategories = catSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+      const catMapByName = new Map<string, string>(); // name -> id
+      existingCategories.forEach(cat => {
+        if (cat.name) {
+          catMapByName.set(cat.name.toLowerCase().trim(), cat.id);
+        }
+      });
       
       const totalSteps = 
         importData.products.length + 
@@ -74,9 +88,43 @@ export function DataImport({ ownerId, onComplete }: DataImportProps) {
 
       // 2. Import Products
       for (const product of importData.products) {
+        let categoryName = (product.category || 'Other').trim();
+        // Fallback for empty categories
+        if (!categoryName) categoryName = 'Other';
+        const lowerCatName = categoryName.toLowerCase().trim();
+        let catId = catMapByName.get(lowerCatName);
+
+        if (!catId) {
+          // Auto-create category in Firestore
+          console.log(`Auto-creating missing category: ${categoryName}`);
+          const categoryRef = await addDoc(collection(db, 'categories'), {
+            userId: ownerId,
+            name: categoryName,
+            createdAt: Date.now(),
+            updatedAt: Date.now()
+          });
+          catId = categoryRef.id;
+          catMapByName.set(lowerCatName, catId);
+
+          // Add to local Dexie categories table as well for offline use
+          try {
+            await (localDb as any).categories.add({
+              id: catId,
+              userId: ownerId,
+              name: categoryName,
+              createdAt: Date.now(),
+              updatedAt: Date.now()
+            });
+          } catch (dexieErr) {
+            console.error('Failed to save category to local Dexie DB:', dexieErr);
+          }
+        }
+
         await saveInventoryProduct({
           ...product,
           userId: ownerId,
+          category: categoryName,
+          categoryId: catId,
           sku: product.sku || `IMP-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
           createdAt: Date.now(),
           updatedAt: Date.now(),

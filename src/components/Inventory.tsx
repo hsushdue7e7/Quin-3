@@ -1,12 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
-import { type Product, UserRole } from '../db';
+import { type Product, UserRole, type Category } from '../db';
 import { Plus, Search, Edit2, Trash2, AlertTriangle, Package, Database, Sparkles, Loader2, Bot, Save, TrendingUp } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 import { db } from '../lib/firebase';
 import { collection, query, where, getDocs, doc, writeBatch, getDoc } from 'firebase/firestore';
 import { saveInventoryProduct, deleteInventoryProduct, withTimeout, logActivity } from '../lib/firestore';
-import { PRODUCT_CATEGORIES } from '../constants/categories';
 import { ProductForm } from './ProductForm';
 
 export function Inventory({ user, ownerId, role, onViewIntelligence }: { user: FirebaseUser; ownerId: string; role: UserRole | null; onViewIntelligence?: (id: string) => void }) {
@@ -30,6 +29,7 @@ export function Inventory({ user, ownerId, role, onViewIntelligence }: { user: F
   const [isAILoading, setIsAILoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [categoriesList, setCategoriesList] = useState<Category[]>([]);
 
   const handleAIQuickAdd = async () => {
     if (!aiInput.trim()) return;
@@ -105,12 +105,46 @@ Return an ARRAY of objects with these properties:
       if (profileDoc.exists()) {
         setProfile(profileDoc.data());
       }
+
+      // Fetch user's categories
+      const catQ = query(collection(db, 'categories'), where('userId', '==', ownerId));
+      const catSnapshot = await getDocs(catQ);
+      setCategoriesList(catSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Category)));
     };
     fetchData();
   }, [ownerId]);
 
   const isGlobalInventoryEnabled = profile?.trackInventory !== false;
-  const categories = Array.from(new Set(products?.map(p => p.category) || [])).sort();
+
+  const derivedCategories = useMemo(() => {
+    const names = new Set<string>();
+    const list: { key: string; label: string }[] = [];
+
+    categoriesList.forEach(cat => {
+      if (cat.name) {
+        const name = cat.name.trim();
+        const lower = name.toLowerCase();
+        if (!names.has(lower)) {
+          names.add(lower);
+          list.push({ key: name, label: name });
+        }
+      }
+    });
+
+    products?.forEach(p => {
+      if (p.category) {
+        const name = p.category.trim();
+        const lower = name.toLowerCase();
+        if (!names.has(lower)) {
+          names.add(lower);
+          list.push({ key: name, label: name });
+        }
+      }
+    });
+
+    list.sort((a, b) => a.label.localeCompare(b.label));
+    return list;
+  }, [categoriesList, products]);
 
   const filteredProducts = products?.filter(p => {
     const matchesSearch = String(p.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -179,6 +213,11 @@ Return an ARRAY of objects with these properties:
       const q = query(collection(db, 'products'), where('userId', '==', ownerId));
       const snapshot = await withTimeout(getDocs(q), 'LIST products');
       setProducts(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Product)));
+
+      // Refresh categories list
+      const catQ = query(collection(db, 'categories'), where('userId', '==', ownerId));
+      const catSnapshot = await getDocs(catQ);
+      setCategoriesList(catSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Category)));
     } catch (error) {
        console.error('Error in handleProductSave:', error);
        alert('Failed to save product. Please try again.');
@@ -359,8 +398,8 @@ Return an ARRAY of objects with these properties:
               className="bg-slate-50 border-slate-200 rounded-lg text-sm px-3 py-2 focus:ring-slate-900"
             >
               <option value="all">All Categories</option>
-              {PRODUCT_CATEGORIES.map(cat => (
-                <option key={cat.id} value={cat.id}>{cat.label}</option>
+              {derivedCategories.map(cat => (
+                <option key={cat.key} value={cat.key}>{cat.label}</option>
               ))}
             </select>
 
@@ -425,7 +464,7 @@ Return an ARRAY of objects with these properties:
                   <td className="px-6 py-4 text-slate-500 font-mono hidden lg:table-cell">{product.sku}</td>
                   <td className="px-6 py-4">
                     <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs">
-                      {PRODUCT_CATEGORIES.find(c => c.id === product.category)?.label || product.category}
+                      {product.category}
                     </span>
                   </td>
                   {isGlobalInventoryEnabled && (
