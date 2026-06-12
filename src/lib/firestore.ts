@@ -899,9 +899,8 @@ export const savePaymentsBatch = async (userId: string, payments: Payment[]) => 
 };
 
 export const deleteBusinessData = async (userId: string) => {
+  console.log(`Starting deleteBusinessData for user: ${userId}`);
   const collectionsToDelete = [
-    'profiles',
-    'business_profiles',
     'products',
     'b2b_products',
     'invoices',
@@ -909,44 +908,134 @@ export const deleteBusinessData = async (userId: string) => {
     'payments',
     'expenses',
     'staff',
-    'roles'
+    'activities',
+    'notifications',
+    'userSessions'
   ];
 
-  try {
-    const batch = writeBatch(db);
+  const refs: any[] = [];
 
-    // Delete simple userId based collections
-    for (const colName of collectionsToDelete) {
+  // Add the profile and business_profile documents directly if they exist, bypass querying
+  try {
+    refs.push(doc(db, 'profiles', userId));
+    console.log(`Successfully prepared profile path for deletion: profiles/${userId}`);
+  } catch (err) {
+    console.error('Error preparing profile deletion reference:', err);
+  }
+
+  try {
+    refs.push(doc(db, 'business_profiles', userId));
+    console.log(`Successfully prepared business_profile path for deletion: business_profiles/${userId}`);
+  } catch (err) {
+    console.error('Error preparing business_profile deletion reference:', err);
+  }
+
+  // Gather simple userId based collections
+  for (const colName of collectionsToDelete) {
+    try {
+      console.log(`Querying collection to delete: ${colName} where userId == ${userId}`);
       const q = query(collection(db, colName), where('userId', '==', userId));
       const snapshot = await getDocs(q);
-      snapshot.forEach(doc => batch.delete(doc.ref));
+      console.log(`Found ${snapshot.size} documents in collection: ${colName}`);
+      snapshot.forEach(docSnap => {
+        refs.push(docSnap.ref);
+      });
+    } catch (err) {
+      console.error(`PERMISSION_DENIED or ERROR gathering collection ${colName}:`, err);
+      throw new Error(`Failed to query collection '${colName}' for user ${userId}: ${err instanceof Error ? err.message : String(err)}`);
     }
+  }
 
-    // Delete connections
+  // Delete reviews written by this user (where buyerId equals userId)
+  try {
+    console.log(`Querying collection to delete: reviews where buyerId == ${userId}`);
+    const revQ = query(collection(db, 'reviews'), where('buyerId', '==', userId));
+    const revSnap = await getDocs(revQ);
+    console.log(`Found ${revSnap.size} documents in collection: reviews`);
+    revSnap.forEach(docSnap => refs.push(docSnap.ref));
+  } catch (err) {
+    console.error(`Error gathering reviews:`, err);
+    throw new Error(`Failed to query reviews: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // Delete connections
+  try {
+    console.log(`Querying connections for: fromUserId == ${userId}`);
     const connQ1 = query(collection(db, 'connections'), where('fromUserId', '==', userId));
+    const connSnap1 = await getDocs(connQ1);
+    console.log(`Found ${connSnap1.size} documents in connections (fromUserId)`);
+    connSnap1.forEach(docSnap => refs.push(docSnap.ref));
+
+    console.log(`Querying connections for: toUserId == ${userId}`);
     const connQ2 = query(collection(db, 'connections'), where('toUserId', '==', userId));
-    const [connSnap1, connSnap2] = await Promise.all([getDocs(connQ1), getDocs(connQ2)]);
-    connSnap1.forEach(doc => batch.delete(doc.ref));
-    connSnap2.forEach(doc => batch.delete(doc.ref));
+    const connSnap2 = await getDocs(connQ2);
+    console.log(`Found ${connSnap2.size} documents in connections (toUserId)`);
+    connSnap2.forEach(docSnap => refs.push(docSnap.ref));
+  } catch (err) {
+    console.error(`Error gathering connections:`, err);
+    throw new Error(`Failed to query connections: ${err instanceof Error ? err.message : String(err)}`);
+  }
 
-    // Delete inquiries
+  // Delete inquiries
+  try {
+    console.log(`Querying inquiries for: buyerId == ${userId}`);
     const inqQ1 = query(collection(db, 'inquiries'), where('buyerId', '==', userId));
+    const inqSnap1 = await getDocs(inqQ1);
+    console.log(`Found ${inqSnap1.size} documents in inquiries (buyerId)`);
+    inqSnap1.forEach(docSnap => refs.push(docSnap.ref));
+
+    console.log(`Querying inquiries for: sellerId == ${userId}`);
     const inqQ2 = query(collection(db, 'inquiries'), where('sellerId', '==', userId));
-    const [inqSnap1, inqSnap2] = await Promise.all([getDocs(inqQ1), getDocs(inqQ2)]);
-    inqSnap1.forEach(doc => batch.delete(doc.ref));
-    inqSnap2.forEach(doc => batch.delete(doc.ref));
+    const inqSnap2 = await getDocs(inqQ2);
+    console.log(`Found ${inqSnap2.size} documents in inquiries (sellerId)`);
+    inqSnap2.forEach(docSnap => refs.push(docSnap.ref));
+  } catch (err) {
+    console.error(`Error gathering inquiries:`, err);
+    throw new Error(`Failed to query inquiries: ${err instanceof Error ? err.message : String(err)}`);
+  }
 
-    // Delete orders
+  // Delete orders
+  try {
+    console.log(`Querying b2b_orders for: buyerId == ${userId}`);
     const ordQ1 = query(collection(db, 'b2b_orders'), where('buyerId', '==', userId));
-    const ordQ2 = query(collection(db, 'b2b_orders'), where('sellerId', '==', userId));
-    const [ordSnap1, ordSnap2] = await Promise.all([getDocs(ordQ1), getDocs(ordQ2)]);
-    ordSnap1.forEach(doc => batch.delete(doc.ref));
-    ordSnap2.forEach(doc => batch.delete(doc.ref));
+    const ordSnap1 = await getDocs(ordQ1);
+    console.log(`Found ${ordSnap1.size} documents in b2b_orders (buyerId)`);
+    ordSnap1.forEach(docSnap => refs.push(docSnap.ref));
 
-    await batch.commit();
-  } catch (error) {
-    console.error('Error deleting business data:', error);
-    throw error;
+    console.log(`Querying b2b_orders for: sellerId == ${userId}`);
+    const ordQ2 = query(collection(db, 'b2b_orders'), where('sellerId', '==', userId));
+    const ordSnap2 = await getDocs(ordQ2);
+    console.log(`Found ${ordSnap2.size} documents in b2b_orders (sellerId)`);
+    ordSnap2.forEach(docSnap => refs.push(docSnap.ref));
+  } catch (err) {
+    console.error(`Error gathering orders:`, err);
+    throw new Error(`Failed to query b2b_orders: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // Also delete the main user registration document
+  try {
+    const userDocRef = doc(db, 'users', userId);
+    refs.push(userDocRef);
+    console.log(`Prepared user document for deletion: users/${userId}`);
+  } catch (err) {
+    console.error(`Error creating user document reference:`, err);
+  }
+
+  // Commit deletions safely in chunk sizes of 400 (well within 500 limit)
+  console.log(`Prepared total of ${refs.length} references to delete.`);
+  const chunkSize = 400;
+  for (let i = 0; i < refs.length; i += chunkSize) {
+    const chunk = refs.slice(i, i + chunkSize);
+    console.log(`Attempting to commit batch deletion of ${chunk.length} items (chunk ${Math.floor(i / chunkSize) + 1}). Paths:`, chunk.map(r => r.path));
+    try {
+      const batch = writeBatch(db);
+      chunk.forEach(ref => batch.delete(ref));
+      await batch.commit();
+      console.log(`Successfully deleted chunk batch of ${chunk.length} items.`);
+    } catch (err) {
+      console.error(`PERMISSION_DENIED or ERROR committing batch delete:`, err);
+      throw new Error(`Failed to execute batch deletion at chunk start index ${i}: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 };
 
@@ -1570,3 +1659,28 @@ export const getQuotationsByStaff = async (ownerId: string, staffName: string, s
     return [];
   }
 };
+
+export const getMyStaffName = async (ownerId: string, currentUser: { uid: string; email?: string | null; displayName?: string | null }): Promise<string> => {
+  if (currentUser.uid === ownerId) {
+    return 'Admin';
+  }
+  try {
+    const q = query(
+      collection(db, 'staff'),
+      where('userId', '==', ownerId)
+    );
+    const snapshot = await getDocs(q);
+    const staffList = snapshot.docs.map(doc => doc.data() as Staff);
+    const matchedStaff = staffList.find(s => 
+      (s.uid && s.uid === currentUser.uid) || 
+      (s.email && currentUser.email && s.email.toLowerCase() === currentUser.email.toLowerCase())
+    );
+    if (matchedStaff) {
+      return matchedStaff.name;
+    }
+  } catch (e) {
+    console.error("Error resolving saved staff name:", e);
+  }
+  return currentUser.displayName || currentUser.email?.split('@')[0] || 'Staff';
+};
+

@@ -24,7 +24,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { PrintModal } from './PrintModal';
 import { InvoiceView } from './InvoiceView';
 import { domToPng } from 'modern-screenshot';
-import { getInvoices, getPayments, getProfile, addPayment, updateInvoice, type Profile as ProfileType, logActivity } from '../lib/firestore';
+import { getInvoices, getPayments, getProfile, addPayment, updateInvoice, type Profile as ProfileType, logActivity, getMyStaffName } from '../lib/firestore';
 
 export function Customers({ 
   user, 
@@ -51,6 +51,7 @@ export function Customers({
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'upi' | 'other'>('cash');
   const [paymentNote, setPaymentNote] = useState('');
+  const [paymentAllocation, setPaymentAllocation] = useState<string>('auto');
   
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -60,10 +61,12 @@ export function Customers({
     if (initialShowPaymentModal) {
       setShowPaymentModal(true);
       setPaymentModalCustomer(null);
+      setPaymentAllocation('auto');
     }
   }, [initialShowPaymentModal]);
 
   const handleOpenPaymentModal = () => {
+    setPaymentAllocation('auto');
     setPaymentModalCustomer(selectedCustomer);
     setShowPaymentModal(true);
   };
@@ -255,6 +258,7 @@ export function Customers({
   };
 
   const handleClosePaymentModal = () => {
+    setPaymentAllocation('auto');
     setShowPaymentModal(false);
     onPaymentModalClose?.();
   };
@@ -269,46 +273,102 @@ export function Customers({
     
     if (!customerDataToUse) return;
 
-    // 1. Record the payment
-    const staffName = user.displayName || user.email?.split('@')[0] || 'Staff';
-    await addPayment({
-      userId: ownerId,
-      customerName: customerDataToUse.name,
-      customerMobile: customerDataToUse.mobile,
-      amount,
-      date: Date.now(),
-      method: paymentMethod,
-      note: paymentNote,
-      createdBy: user.uid,
-      staffName
-    });
+    const staffName = await getMyStaffName(ownerId, user);
 
-    // Log activity
-    await logActivity({
-      userId: ownerId,
-      staffId: user.uid,
-      staffName,
-      action: `Recorded payment of ${formatCurrency(amount)}`,
-      details: `Customer: ${customerDataToUse.name}, Method: ${paymentMethod}${paymentNote ? `, Note: ${paymentNote}` : ''}`,
-      type: 'payment',
-      timestamp: Date.now()
-    });
+    if (paymentAllocation !== 'auto') {
+      // 1. Specific invoice was chosen
+      const selectedInv = invoices.find(inv => inv.id === paymentAllocation);
+      if (selectedInv) {
+        const reduction = Math.min(selectedInv.creditAmount, amount);
+        await updateInvoice(selectedInv.id!.toString(), {
+          creditAmount: selectedInv.creditAmount - reduction,
+          receivedAmount: selectedInv.receivedAmount + reduction
+        });
 
-    // 2. Update invoices to reduce credit (oldest first)
-    let remainingPayment = amount;
-    const customerInvoices = invoices
-      .filter(inv => (inv.customerMobile || inv.customerName) === paymentModalCustomer && inv.creditAmount > 0)
-      .sort((a, b) => a.date - b.date);
+        await addPayment({
+          userId: ownerId,
+          customerName: customerDataToUse.name,
+          customerMobile: customerDataToUse.mobile,
+          amount,
+          date: Date.now(),
+          method: paymentMethod,
+          note: paymentNote ? `${paymentNote} (Paid against ${selectedInv.invoiceNumber})` : `Paid against invoice ${selectedInv.invoiceNumber}`,
+          createdBy: user.uid,
+          staffName,
+          invoiceNumber: selectedInv.invoiceNumber,
+          invoiceDate: selectedInv.date
+        });
 
-    for (const inv of customerInvoices) {
-      if (remainingPayment <= 0) break;
+        await logActivity({
+          userId: ownerId,
+          staffId: user.uid,
+          staffName,
+          action: `Recorded payment of ${formatCurrency(amount)} for invoice ${selectedInv.invoiceNumber}`,
+          details: `Customer: ${customerDataToUse.name}, Method: ${paymentMethod}${paymentNote ? `, Note: ${paymentNote}` : ''}`,
+          type: 'payment',
+          timestamp: Date.now()
+        });
+      }
+    } else {
+      // 2. Auto-allocate / split (oldest first)
+      let remainingPayment = amount;
+      const customerInvoices = invoices
+        .filter(inv => (inv.customerMobile || inv.customerName) === paymentModalCustomer && inv.creditAmount > 0)
+        .sort((a, b) => a.date - b.date);
 
-      const reduction = Math.min(inv.creditAmount, remainingPayment);
-      await updateInvoice(inv.id!.toString(), {
-        creditAmount: inv.creditAmount - reduction,
-        receivedAmount: inv.receivedAmount + reduction
+      let anyAllocationMade = false;
+
+      for (const inv of customerInvoices) {
+        if (remainingPayment <= 0) break;
+
+        const reduction = Math.min(inv.creditAmount, remainingPayment);
+        await updateInvoice(inv.id!.toString(), {
+          creditAmount: inv.creditAmount - reduction,
+          receivedAmount: inv.receivedAmount + reduction
+        });
+
+        await addPayment({
+          userId: ownerId,
+          customerName: customerDataToUse.name,
+          customerMobile: customerDataToUse.mobile,
+          amount: reduction,
+          date: Date.now(),
+          method: paymentMethod,
+          note: paymentNote ? `${paymentNote} (Allocated to ${inv.invoiceNumber})` : `Allocated to invoice ${inv.invoiceNumber}`,
+          createdBy: user.uid,
+          staffName,
+          invoiceNumber: inv.invoiceNumber,
+          invoiceDate: inv.date
+        });
+
+        remainingPayment -= reduction;
+        anyAllocationMade = true;
+      }
+
+      // If credit invoices were empty or there was an excess (advance payment)
+      if (remainingPayment > 0 || !anyAllocationMade) {
+        await addPayment({
+          userId: ownerId,
+          customerName: customerDataToUse.name,
+          customerMobile: customerDataToUse.mobile,
+          amount: remainingPayment,
+          date: Date.now(),
+          method: paymentMethod,
+          note: paymentNote ? `${paymentNote} (Advance)` : `Unallocated / advance payment`,
+          createdBy: user.uid,
+          staffName
+        });
+      }
+
+      await logActivity({
+        userId: ownerId,
+        staffId: user.uid,
+        staffName,
+        action: `Recorded credit payment of ${formatCurrency(amount)}`,
+        details: `Customer: ${customerDataToUse.name}, Method: ${paymentMethod}, Allocated across credit invoices (oldest first).`,
+        type: 'payment',
+        timestamp: Date.now()
       });
-      remainingPayment -= reduction;
     }
 
     // Refresh data
@@ -372,6 +432,38 @@ export function Customers({
                 />
               </div>
             </div>
+
+            {paymentModalCustomer && (
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Payment Allocation</label>
+                <select
+                  value={paymentAllocation}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setPaymentAllocation(val);
+                    if (val !== 'auto') {
+                      const selectedInv = invoices.find(inv => inv.id === val);
+                      if (selectedInv) {
+                        setPaymentAmount(selectedInv.creditAmount.toString());
+                      }
+                    } else {
+                      setPaymentAmount('');
+                    }
+                  }}
+                  className="w-full px-4 py-3 bg-slate-50 border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-900 transition-all text-sm"
+                >
+                  <option value="auto">Auto-allocate (oldest credit first)</option>
+                  {invoices
+                    .filter(inv => (inv.customerMobile || inv.customerName) === paymentModalCustomer && inv.creditAmount > 0)
+                    .map(inv => (
+                      <option key={inv.id} value={inv.id}>
+                        {inv.invoiceNumber} - Due: {formatCurrency(inv.creditAmount)} ({new Date(inv.date).toLocaleDateString()})
+                      </option>
+                    ))
+                  }
+                </select>
+              </div>
+            )}
 
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Payment Method</label>
@@ -570,11 +662,20 @@ export function Customers({
                     </div>
                     <div>
                       <div className="font-bold text-slate-900">{formatCurrency(p.amount)}</div>
-                      <div className="text-sm text-slate-500 flex items-center gap-2 mt-1">
-                        <Calendar size={14} />
-                        {new Date(p.date).toLocaleDateString()}
-                        <span className="mx-1">•</span>
+                      <div className="text-sm text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+                        <Calendar size={14} className="inline" />
+                        <span>{new Date(p.date).toLocaleDateString()}</span>
+                        <span className="text-slate-300">•</span>
                         <span className="capitalize">{p.method}</span>
+                        {p.invoiceNumber && (
+                          <>
+                            <span className="text-slate-300">•</span>
+                            <span className="bg-slate-50 text-slate-700 font-medium px-2 py-0.5 rounded border border-slate-200 text-[10px] flex items-center gap-1">
+                              <FileText size={10} className="text-slate-500" />
+                              Invoice: {p.invoiceNumber}
+                            </span>
+                          </>
+                        )}
                       </div>
                       {p.note && <p className="text-xs text-slate-400 mt-1 italic">"{p.note}"</p>}
                     </div>

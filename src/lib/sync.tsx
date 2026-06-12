@@ -25,10 +25,14 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
   // Load sync state from localStorage
   useEffect(() => {
-    const savedSync = localStorage.getItem('quin_sync_state');
-    if (savedSync) {
-      const { lastSync: savedLastSync } = JSON.parse(savedSync);
-      if (savedLastSync) setLastSync(new Date(savedLastSync));
+    try {
+      const savedSync = localStorage.getItem('quin_sync_state');
+      if (savedSync) {
+        const { lastSync: savedLastSync } = JSON.parse(savedSync);
+        if (savedLastSync) setLastSync(new Date(savedLastSync));
+      }
+    } catch (e) {
+      console.warn('Failed to parse saved sync state from localStorage', e);
     }
   }, []);
 

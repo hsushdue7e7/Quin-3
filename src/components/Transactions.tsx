@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
-import { type Invoice, type Payment, type Expense, UserRole } from '../db';
+import { type Invoice, type Payment, type Expense, type Staff, UserRole } from '../db';
 import { formatCurrency } from '../lib/utils';
 import { 
   Receipt, 
@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion } from 'motion/react';
-import { getInvoices, getPayments, getExpenses, getQuotations } from '../lib/firestore';
+import { getInvoices, getPayments, getExpenses, getQuotations, getStaff } from '../lib/firestore';
 
 type TransactionType = 'all' | 'sale' | 'payment' | 'expense' | 'quotation';
 
@@ -42,6 +42,7 @@ export function Transactions({
   const [quotations, setQuotations] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [staffList, setStaffList] = useState<Staff[]>([]);
 
   const showExpenses = role === 'admin' || role === 'ca' || role === 'sales_manager';
   const showSales = role === 'admin' || role === 'sales_manager' || role === 'ca';
@@ -64,14 +65,24 @@ export function Transactions({
       if (showExpenses) promises.push(getExpenses(ownerId));
       else promises.push(Promise.resolve([]));
 
-      const [invs, quots, pays, exps] = await Promise.all(promises);
+      promises.push(getStaff(ownerId).catch(() => []));
+
+      const [invs, quots, pays, exps, staff] = await Promise.all(promises);
       setInvoices(invs);
       setQuotations(quots);
       setPayments(pays);
       setExpenses(exps);
+      setStaffList(staff || []);
     };
     fetchData();
   }, [ownerId, showSales, showPayments, showExpenses]);
+
+  const getStaffDisplayName = (createdByUid?: string, defaultStaffName?: string) => {
+    if (!createdByUid) return defaultStaffName || 'Admin';
+    if (createdByUid === ownerId) return 'Admin';
+    const staff = staffList.find(s => s.uid === createdByUid);
+    return staff ? staff.name : (defaultStaffName || 'Admin');
+  };
 
   const allTransactions = [
     ...(showSales ? invoices.map(inv => ({
@@ -85,7 +96,8 @@ export function Transactions({
       reference: inv.invoiceNumber,
       method: inv.paymentMethod === 'split' ? 'Split' : (inv.paymentMethod || (inv.creditAmount > 0 ? 'Partial' : 'Paid')),
       status: inv.creditAmount > 0 ? 'Partial' : 'Paid',
-      staffName: inv.staffName
+      staffName: inv.staffName,
+      createdBy: inv.createdBy
     })) : []),
     ...(showSales ? quotations.map(inv => ({
       id: `quot-${inv.id}`,
@@ -98,7 +110,8 @@ export function Transactions({
       reference: inv.invoiceNumber,
       method: 'Quote',
       status: 'Quote',
-      staffName: inv.staffName
+      staffName: inv.staffName,
+      createdBy: inv.createdBy
     })) : []),
     ...(showPayments ? payments.map(p => ({
       id: `pay-${p.id}`,
@@ -108,10 +121,11 @@ export function Transactions({
       amount: p.amount,
       creditAmount: 0,
       date: p.date,
-      reference: 'Payment Received',
+      reference: p.invoiceNumber ? `Invoice ${p.invoiceNumber}` : 'Payment Received',
       method: p.method,
       status: 'Received',
-      staffName: p.staffName
+      staffName: p.staffName,
+      createdBy: p.createdBy
     })) : []),
     ...(showExpenses ? expenses.map(e => ({
       id: `exp-${e.id}`,
@@ -124,7 +138,8 @@ export function Transactions({
       reference: e.description || 'Expense',
       method: e.paymentMethod,
       status: 'Paid',
-      staffName: e.staffName
+      staffName: e.staffName,
+      createdBy: e.createdBy
     })) : [])
   ].sort((a, b) => b.date - a.date);
 
@@ -239,7 +254,7 @@ export function Transactions({
                   </td>
                   <td className="px-6 py-4">
                     <div className="text-xs font-medium text-slate-600">
-                      {t.staffName || 'Admin'}
+                      {getStaffDisplayName(t.createdBy, t.staffName)}
                     </div>
                   </td>
                   <td className="px-6 py-4">

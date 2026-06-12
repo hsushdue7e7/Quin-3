@@ -1,8 +1,9 @@
 import express from "express";
 import path from "path";
-import { existsSync, readdirSync } from "fs";
+import { existsSync, readdirSync, readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import admin from "firebase-admin";
+import { getFirestore } from "firebase-admin/firestore";
 import twilio from "twilio";
 
 // Initialize Firebase Admin lazily
@@ -20,7 +21,17 @@ function getDb() {
         admin.initializeApp({ credential: admin.credential.applicationDefault() });
       }
     }
-    db = admin.firestore();
+    
+    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+    let databaseId = "(default)";
+    if (existsSync(configPath)) {
+      const firebaseConfig = JSON.parse(readFileSync(configPath, 'utf8'));
+      if (firebaseConfig.firestoreDatabaseId) {
+        databaseId = firebaseConfig.firestoreDatabaseId;
+      }
+    }
+    
+    db = getFirestore(admin.apps[0], databaseId) as unknown as admin.firestore.Firestore;
     return db;
   } catch (error) {
     console.error("Firebase Admin Error:", error);

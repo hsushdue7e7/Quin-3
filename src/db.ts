@@ -110,6 +110,8 @@ export interface Payment {
   note?: string;
   createdBy?: string;
   staffName?: string;
+  invoiceNumber?: string;
+  invoiceDate?: number;
 }
 
 export type UserRole = 'admin' | 'sales_manager' | 'inventory_manager' | 'ca';

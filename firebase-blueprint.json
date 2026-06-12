@@ -125,7 +125,9 @@
         "customerName": { "type": "string" },
         "amount": { "type": "number" },
         "date": { "type": "number" },
-        "method": { "type": "string" }
+        "method": { "type": "string" },
+        "invoiceNumber": { "type": "string" },
+        "invoiceDate": { "type": "number" }
       },
       "required": ["userId", "customerName", "amount", "date"]
     },

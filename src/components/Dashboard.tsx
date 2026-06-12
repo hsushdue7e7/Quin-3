@@ -226,7 +226,7 @@ export function Dashboard({
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-20">
+    <div className="space-y-6 pb-20">
       {showPrintModal && selectedInvoice && (
         <PrintModal 
           invoice={selectedInvoice} 
@@ -244,7 +244,7 @@ export function Dashboard({
           <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Today's Business Snapshot</h2>
           <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-bold">{format(new Date(), 'dd MMM, yyyy')}</span>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
           {showSales && (
             <SnapshotCard 
               label="Today Sales" 
@@ -293,7 +293,7 @@ export function Dashboard({
       </section>
 
       {/* Action Buttons */}
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {(role === 'admin' || role === 'sales_manager') && (
           <ActionButton 
             label="Create Sale/Invoice" 

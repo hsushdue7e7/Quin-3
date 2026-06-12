@@ -15,7 +15,8 @@ import { ConfirmationModal } from './ConfirmationModal';
 import { useSync } from '../lib/sync';
 import { BackupRestore } from './BackupRestore';
 import { DataImport } from './DataImport';
-import { Maximize, Minimize } from 'lucide-react';
+import { DataManagementCenter } from './DataManagementCenter';
+import { Maximize, Minimize, Shield } from 'lucide-react';
 
 export function FullscreenToggle() {
   const [isFullscreen, setIsFullscreen] = React.useState(false);
@@ -63,8 +64,8 @@ export function FullscreenToggle() {
 import { getProfile, saveProfile, type Profile as ProfileType, getBusinessProfile, getInvoices, getPayments, getExpenses, deleteBusinessData, getStaff, saveStaff, deactivateStaff, getActivitiesByStaff, getInvoicesByStaff, getPaymentsByStaff, getExpensesByStaff, getQuotationsByStaff } from '../lib/firestore';
 import { formatPhone, formatCurrency, cn } from '../lib/utils';
 import { db as localDb, type BusinessProfile, type Invoice, type Product, type Payment, type Expense, type Staff, UserRole } from '../db';
-import { db } from '../lib/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db, auth } from '../lib/firebase';
+import { collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
 import { startOfMonth, endOfMonth, subMonths, format } from 'date-fns';
 
 export function Profile({ user, ownerId, role, onLogout }: { 
@@ -80,6 +81,7 @@ export function Profile({ user, ownerId, role, onLogout }: {
   const [isEditing, setIsEditing] = useState(false);
   const [isEditingBusiness, setIsEditingBusiness] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [testCrash, setTestCrash] = useState(false);
   const [activeView, setActiveView] = useState<'profile' | 'reports' | 'inventory' | 'staff' | 'import' | 'backup' | 'preferences' | 'danger'>(isAdmin || role === 'ca' ? 'reports' : 'profile');
   const [error, setError] = useState<string | null>(null);
   const [showThemePicker, setShowThemePicker] = useState(false);
@@ -167,16 +169,7 @@ export function Profile({ user, ownerId, role, onLogout }: {
     };
   }, [invoices, products]);
 
-  const handleDeleteBusiness = async () => {
-    if (window.confirm('CRITICAL: This will permanently delete ALL your business data including invoices, products, and customers. This action cannot be undone. Are you sure?')) {
-      try {
-        await deleteBusinessData(ownerId);
-        onLogout();
-      } catch (err) {
-        setError('Failed to delete business data');
-      }
-    }
-  };
+
 
   const handleSaveProfile = async (profileData: ProfileType) => {
     await saveProfile(ownerId, profileData);
@@ -276,6 +269,10 @@ export function Profile({ user, ownerId, role, onLogout }: {
     }
   };
 
+  if (testCrash) {
+    throw new Error("Simulated Developer Test Crash: verifying the ErrorBoundary's failure capture and hard reset flow.");
+  }
+
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       <div className="flex justify-between items-end">
@@ -294,7 +291,7 @@ export function Profile({ user, ownerId, role, onLogout }: {
               : activeView === 'preferences'
               ? 'Business Preferences'
               : activeView === 'danger'
-              ? 'Danger Zone'
+              ? 'Data Management'
               : 'Inventory Settings'}
           </h1>
           <p className="text-slate-500 mt-1 text-sm">
@@ -311,7 +308,7 @@ export function Profile({ user, ownerId, role, onLogout }: {
               : activeView === 'preferences'
               ? 'Configure app settings, taxes, and inventory behavior.'
               : activeView === 'danger'
-              ? 'Irreversible account and data actions.'
+              ? 'Centralized hub for database backup, export excel, and safe session wipes.'
               : 'Configure inventory tracking.'}
           </p>
         </div>
@@ -435,12 +432,12 @@ export function Profile({ user, ownerId, role, onLogout }: {
                         onClick={() => { setActiveView('danger'); setIsNavOpen(false); }}
                         className={`px-4 py-3 text-sm font-bold transition-all flex items-center gap-3 border-t border-slate-100 ${
                           activeView === 'danger' 
-                            ? 'bg-slate-50 text-rose-600' 
-                            : 'text-rose-600 hover:bg-rose-50'
+                            ? 'bg-slate-50 text-indigo-600' 
+                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                         }`}
                       >
-                        <Trash2 size={18} />
-                        Danger Zone
+                        <Shield size={18} />
+                        Data Management
                       </button>
                       <FullscreenToggle />
                     </>
@@ -463,11 +460,10 @@ export function Profile({ user, ownerId, role, onLogout }: {
       </div>
 
       {activeView === 'backup' && isAdmin && (
-        <BackupRestore 
-          userId={ownerId} 
-          onRestoreComplete={() => {
-            setActiveView('profile');
-          }} 
+        <DataManagementCenter 
+          ownerId={ownerId} 
+          userEmail={user?.email || ''} 
+          onLogout={onLogout} 
         />
       )}
 
@@ -971,57 +967,35 @@ export function Profile({ user, ownerId, role, onLogout }: {
                   </AnimatePresence>
                 </div>
               </div>
+
+              {/* Setting 5: Diagnostics & Crash simulation */}
+              <div className="p-6 space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-0.5">
+                    <h4 className="font-bold text-slate-900 text-sm">Crash Management & Diagnostics</h4>
+                    <p className="text-xs text-slate-500 leading-tight">Simulate an application crash to test recovery and Error Boundary diagnostics.</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (window.confirm("This will trigger a simulated rendering crash to test the error boundary page. Continue?")) {
+                        setTestCrash(true);
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition-all border border-rose-100 shrink-0"
+                  >
+                    Simulate Crash
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       ) : activeView === 'danger' && isAdmin ? (
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-rose-200 shadow-sm space-y-4">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2.5 bg-rose-50 rounded-xl text-rose-600">
-                <AlertCircle size={20} />
-              </div>
-              <div>
-                <h3 className="font-bold text-slate-900 text-lg leading-none mb-1">Danger Zone</h3>
-                <p className="text-xs text-rose-600/80 font-medium">Irreversible actions</p>
-              </div>
-            </div>
-            
-            <div className="space-y-4">
-              <div className="p-4 bg-rose-50/50 rounded-2xl border border-rose-100 flex items-start gap-4">
-                <Trash2 size={24} className="text-rose-500 shrink-0 mt-1" />
-                <div className="space-y-1">
-                  <h4 className="font-bold text-rose-900">Delete All Business Data</h4>
-                  <p className="text-xs text-rose-700 leading-relaxed">
-                    This will permanently remove all your invoices, products, customer records, and inventory data. 
-                  </p>
-                  <button
-                    onClick={handleDeleteBusiness}
-                    className="mt-3 px-6 py-2.5 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-700 transition-all flex items-center gap-2 shadow-lg shadow-rose-100 active:scale-95"
-                  >
-                    Delete Data Permanently
-                  </button>
-                </div>
-              </div>
-              
-              <div className="p-4 bg-slate-50/50 rounded-2xl border border-slate-200 flex items-start gap-4">
-                <LogOut size={24} className="text-slate-400 shrink-0 mt-1" />
-                <div className="space-y-1">
-                  <h4 className="font-bold text-slate-900">Logout Everywhere</h4>
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    Clear your session on this device and return to the login screen.
-                  </p>
-                  <button
-                    onClick={onLogout}
-                    className="mt-3 px-6 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-all flex items-center gap-2 active:scale-95 shadow-sm"
-                  >
-                    Logout from Device
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <DataManagementCenter 
+          ownerId={ownerId} 
+          userEmail={user?.email || ''} 
+          onLogout={onLogout} 
+        />
       ) : activeView === 'reports' ? (
         <Reports user={user} ownerId={ownerId} />
       ) : activeView === 'staff' ? (
@@ -1394,8 +1368,8 @@ function StaffActivityLog({ ownerId, staff, onBack }: {
           ...staffPayments.map(p => ({
             id: p.id,
             timestamp: p.date,
-            action: `Recorded payment of ${formatCurrency(p.amount)}`,
-            details: `Customer: ${p.customerName}, Method: ${p.method}`,
+            action: p.invoiceNumber ? `Recorded payment of ${formatCurrency(p.amount)} for invoice ${p.invoiceNumber}` : `Recorded payment of ${formatCurrency(p.amount)}`,
+            details: `Customer: ${p.customerName}, Method: ${p.method}${p.invoiceDate ? `, Inv Date: ${new Date(p.invoiceDate).toLocaleDateString()}` : ''}`,
             type: 'payment' as const
           })),
           ...staffExpenses.map(e => ({

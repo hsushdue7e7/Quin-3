@@ -4,7 +4,7 @@ import { type Product, type InvoiceItem, type Invoice, UserRole, type SplitPayme
 import { Plus, Trash2, Printer, Save, Search, User as UserIcon, FileText, IndianRupee, ChevronDown, ChevronUp, Split } from 'lucide-react';
 import { formatCurrency, generateInvoiceNumber, cn, formatPhone } from '../lib/utils';
 import { PrintModal } from './PrintModal';
-import { getInvoices, getProfile, getInvoice, type Profile as ProfileType, logActivity } from '../lib/firestore';
+import { getInvoices, getProfile, getInvoice, type Profile as ProfileType, logActivity, getMyStaffName } from '../lib/firestore';
 import { db } from '../lib/firebase';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc } from 'firebase/firestore';
 
@@ -167,6 +167,12 @@ export function Billing({
     }
   }, [editId, initialItems]);
 
+  useEffect(() => {
+    if (isQuotation) {
+      setIsDirectSell(false);
+    }
+  }, [isQuotation]);
+
   const filteredProducts = products?.filter(p => 
     String(p.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     String(p.sku || '').toLowerCase().includes(searchTerm.toLowerCase())
@@ -324,12 +330,21 @@ export function Billing({
   const creditAmount = Math.max(0, netTotal - finalReceivedAmount);
 
   const handleSave = async () => {
+    if (isQuotation) {
+      if (!customerName || items.length === 0) {
+        alert('Please enter a customer name and add at least one item to save the quotation.');
+        return;
+      }
+    }
+
     const finalCustomerName = isDirectSell ? 'Walk-in Customer' : customerName;
 
     if (!finalCustomerName || items.length === 0) {
       alert('Please enter customer name or select Direct Sell, and add at least one item.');
       return;
     }
+
+    const resolvedStaffName = await getMyStaffName(ownerId, user);
 
     const invoiceData: any = {
       userId: ownerId,
@@ -350,13 +365,13 @@ export function Billing({
       sgstTotal: isGstInvoice ? sgstTotal : 0,
       igstTotal: isGstInvoice ? igstTotal : 0,
       total: netTotal,
-      receivedAmount: finalReceivedAmount,
-      paymentMethod,
-      creditAmount,
+      receivedAmount: isQuotation ? 0 : finalReceivedAmount,
+      paymentMethod: isQuotation ? 'quotation' : paymentMethod,
+      creditAmount: isQuotation ? 0 : creditAmount,
       date: originalInvoice ? originalInvoice.date : Date.now(),
       invoiceNumber: originalInvoice ? originalInvoice.invoiceNumber : generateInvoiceNumber(),
       createdBy: originalInvoice?.createdBy || user.uid,
-      staffName: originalInvoice?.staffName || user.displayName || user.email?.split('@')[0] || 'Staff'
+      staffName: originalInvoice?.staffName || resolvedStaffName
     };
 
     if (isQuotation) {
@@ -501,9 +516,9 @@ export function Billing({
     sgstTotal: isGstInvoice ? sgstTotal : 0,
     igstTotal: isGstInvoice ? igstTotal : 0,
     total: netTotal,
-    receivedAmount: finalReceivedAmount,
-    paymentMethod,
-    creditAmount,
+    receivedAmount: isQuotation ? 0 : finalReceivedAmount,
+    paymentMethod: isQuotation ? 'quotation' : paymentMethod,
+    creditAmount: isQuotation ? 0 : creditAmount,
     date: originalInvoice ? originalInvoice.date : Date.now(),
     invoiceNumber: originalInvoice ? originalInvoice.invoiceNumber : generateInvoiceNumber()
   };
@@ -517,16 +532,27 @@ export function Billing({
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       {showPrintModal && (
         <PrintModal 
           invoice={currentInvoice} 
           profile={profile} 
-          onClose={() => setShowPrintModal(false)} 
+          onClose={() => {
+            setShowPrintModal(false);
+            if (onComplete) {
+              onComplete();
+            } else {
+              setItems([]);
+              setCustomerName('');
+              setCustomerMobile('');
+              setReceivedAmount('');
+              setIsFullPayment(false);
+            }
+          }} 
           autoPrint={autoPrint}
         />
       )}
-      <div className="md:col-span-2 space-y-6">
+      <div className="lg:col-span-2 space-y-6">
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-6 border-b border-slate-100 flex justify-between items-center">
             <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
@@ -738,25 +764,27 @@ export function Billing({
               >
                 {isQuotation ? 'GST Quotation' : 'GST Sale/Invoice'}
               </button>
-              <button
-                onClick={() => {
-                  setIsDirectSell(!isDirectSell);
-                  if (!isDirectSell) {
-                    setCustomerName('Walk-in Customer');
-                    setCustomerMobile('');
-                  } else {
-                    setCustomerName('');
-                  }
-                }}
-                className={cn(
-                  "px-3 py-1 rounded-full text-[10px] font-bold transition-all",
-                  isDirectSell 
-                    ? "bg-slate-900 text-white" 
-                    : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                )}
-              >
-                Direct Sell
-              </button>
+              {!isQuotation && (
+                <button
+                  onClick={() => {
+                    setIsDirectSell(!isDirectSell);
+                    if (!isDirectSell) {
+                      setCustomerName('Walk-in Customer');
+                      setCustomerMobile('');
+                    } else {
+                      setCustomerName('');
+                    }
+                  }}
+                  className={cn(
+                    "px-3 py-1 rounded-full text-[10px] font-bold transition-all",
+                    isDirectSell 
+                      ? "bg-slate-900 text-white" 
+                      : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  )}
+                >
+                  Direct Sell
+                </button>
+              )}
             </div>
           </div>
           <div className={cn("space-y-4 transition-opacity", isDirectSell ? "opacity-50 pointer-events-none" : "")}>

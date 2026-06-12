@@ -15,7 +15,7 @@ export function InvoiceView({
   isThermalMode?: boolean;
   theme?: InvoiceTheme;
 }) {
-  const activeTheme = theme || profile?.invoiceTheme || 'modern';
+  const activeTheme = invoice.type === 'quotation' ? 'tabular' : (theme || profile?.invoiceTheme || 'modern');
   
   if (isThermalMode) {
     return (
@@ -96,6 +96,185 @@ export function InvoiceView({
         <div className="mt-4 text-center text-[9px] border-t border-dashed border-black pt-2">
           <p>THANKS FOR VISITING!</p>
           <p>This is a computer generated bill.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (activeTheme === 'tabular') {
+    return (
+      <div className="text-black bg-white w-full max-w-[210mm] min-h-[297mm] mx-auto font-sans p-[15mm] print:p-0 relative flex flex-col justify-between">
+        <div>
+          {/* Main Title Banner in simple tabular form */}
+          <div className="border border-slate-800 text-center py-2.5 mb-6">
+            <h1 className="text-xl font-bold uppercase tracking-widest text-slate-900">
+              {invoice.type === 'quotation' ? 'Quotation / Proforma Invoice' : 'Tax Invoice (Tabular)'}
+            </h1>
+          </div>
+
+          {/* Supplier and Document info in a 2-column tabular grid */}
+          <div className="grid grid-cols-2 border border-slate-300 divide-x divide-slate-300 mb-6">
+            <div className="p-4 space-y-2">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Sender / Supplier</p>
+              <h2 className="text-lg font-extrabold tracking-tight text-slate-900">{profile?.businessName || 'Business Name'}</h2>
+              <p className="text-xs text-slate-600 whitespace-pre-line leading-relaxed">{profile?.address}</p>
+              {profile?.phone && <p className="text-xs font-semibold text-slate-800">Phone: {formatPhone(profile.phone)}</p>}
+              {profile?.gstin && <p className="text-xs font-bold text-slate-900 mt-1">GSTIN: {profile.gstin}</p>}
+            </div>
+            
+            <div className="p-4 space-y-3.5 divide-y divide-slate-200">
+              <div className="grid grid-cols-2 text-xs gap-y-1">
+                <span className="text-slate-500 font-semibold uppercase tracking-wider text-[9px]">Quotation No:</span>
+                <span className="font-extrabold text-slate-900 text-right">#{invoice.invoiceNumber}</span>
+                
+                <span className="text-slate-500 font-semibold uppercase tracking-wider text-[9px]">Date:</span>
+                <span className="font-bold text-slate-900 text-right">{new Date(invoice.date).toLocaleDateString('en-IN')}</span>
+              </div>
+              
+              {invoice.type === 'quotation' && invoice.validityDate && (
+                <div className="grid grid-cols-2 text-xs pt-2 gap-y-1">
+                  <span className="text-slate-500 font-semibold uppercase tracking-wider text-[9px]">Expiry Date:</span>
+                  <span className="font-black text-rose-600 text-right">{new Date(invoice.validityDate).toLocaleDateString('en-IN')}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Customer / Client info in a full border box */}
+          <div className="border border-slate-300 p-4 mb-6 space-y-1.5 bg-slate-50/50">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Customer / Client (Quotation For)</p>
+            <h3 className="text-sm font-extrabold text-slate-900">{invoice.customerName}</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-slate-700">
+              <div>
+                {invoice.customerAddress && (
+                  <p className="text-slate-600 whitespace-pre-line leading-relaxed mt-1">{invoice.customerAddress}</p>
+                )}
+              </div>
+              <div className="space-y-1 text-right md:text-right text-slate-600">
+                {invoice.customerMobile && <p><strong>Phone:</strong> {invoice.customerMobile}</p>}
+                {invoice.customerGstin && <p className="font-bold text-slate-900"><strong>GSTIN:</strong> {invoice.customerGstin}</p>}
+                {invoice.isGstInvoice && invoice.stateOfSupply && (
+                  <p className="font-medium"><strong>State of Supply:</strong> {invoice.stateOfSupply}</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Core Tabular Items Grid */}
+          <div className="border border-slate-300 overflow-hidden mb-6">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-100 border-b border-slate-300 text-slate-800 text-[10px] uppercase font-bold tracking-wider divide-x divide-slate-300">
+                  <th className="py-2 px-3 w-10 text-center">#</th>
+                  <th className="py-2 px-3">Item Description</th>
+                  {invoice.isGstInvoice && <th className="py-2 px-3 text-center w-24">HSN/SAC</th>}
+                  <th className="py-2 px-3 text-right w-16">Qty</th>
+                  <th className="py-2 px-3 text-center w-16">Unit</th>
+                  <th className="py-2 px-3 text-right w-24">Rate</th>
+                  {invoice.isGstInvoice && <th className="py-2 px-3 text-right w-16">GST %</th>}
+                  <th className="py-2 px-3 text-right w-28 font-bold text-slate-900">Amount</th>
+                </tr>
+              </thead>
+              <tbody className="text-xs divide-y divide-slate-300 font-medium text-slate-800">
+                {invoice.items.map((item, i) => (
+                  <tr key={i} className="divide-x divide-slate-300 hover:bg-slate-50/50">
+                    <td className="py-2 px-3 text-center text-slate-400">{i + 1}</td>
+                    <td className="py-2 px-3 font-semibold text-slate-900">{item.name}</td>
+                    {invoice.isGstInvoice && <td className="py-2 px-3 text-center text-slate-500 font-mono">{item.hsnCode || '-'}</td>}
+                    <td className="py-2 px-3 text-right">{item.quantity}</td>
+                    <td className="py-2 px-3 text-center text-slate-500">{item.unit || 'pcs'}</td>
+                    <td className="py-2 px-3 text-right">{formatCurrency(item.price).replace('₹', '')}</td>
+                    {invoice.isGstInvoice && <td className="py-2 px-3 text-right">{item.gstRate}%</td>}
+                    <td className="py-2 px-3 text-right font-bold text-slate-950">{formatCurrency(item.total).replace('₹', '')}</td>
+                  </tr>
+                ))}
+                {/* Standard grid padding rows */}
+                {invoice.items.length < 6 && Array.from({ length: 6 - invoice.items.length }).map((_, i) => (
+                  <tr key={`blank-${i}`} className="h-8 divide-x divide-slate-300">
+                    <td colSpan={invoice.isGstInvoice ? 8 : 6}></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pricing Summary Block & Terms in unified grid layout */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 border border-slate-300 p-4 bg-slate-50/30">
+            <div className="text-[10px] space-y-2">
+              <h4 className="font-extrabold text-slate-800 uppercase tracking-widest text-[9px]">Terms & Conditions</h4>
+              <ul className="list-decimal pl-4 space-y-1 text-slate-600 leading-relaxed text-[11px]">
+                <li>Prices quoted are firm and valid until the expiry date.</li>
+                <li>Delivery will be arranged as per standard stock availability.</li>
+                <li>GST and other taxes are computed strictly based on statutory rates.</li>
+                <li>This is an officially generated business quotation sheet.</li>
+              </ul>
+            </div>
+
+            <div className="space-y-1.5 divide-y divide-slate-200">
+              <div className="grid grid-cols-2 text-xs py-1">
+                <span className="text-slate-500 font-medium">Subtotal Amount:</span>
+                <span className="font-bold text-slate-900 text-right">{formatCurrency(invoice.subtotal)}</span>
+              </div>
+              
+              {invoice.discount ? (
+                <div className="grid grid-cols-2 text-xs py-1 pt-1.5">
+                  <span className="text-slate-500 font-medium">Special Discount:</span>
+                  <span className="font-bold text-emerald-600 text-right">-{formatCurrency(invoice.discount)}</span>
+                </div>
+              ) : null}
+
+              {invoice.isGstInvoice ? (
+                <div className="space-y-1 py-1.5">
+                  {(invoice.igstTotal && invoice.igstTotal > 0) ? (
+                    <div className="grid grid-cols-2 text-xs">
+                      <span className="text-slate-500 font-medium">Integrated GST (IGST):</span>
+                      <span className="font-bold text-slate-900 text-right">{formatCurrency(invoice.igstTotal || 0)}</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 text-xs">
+                        <span className="text-slate-500 font-medium">Central GST (CGST):</span>
+                        <span className="font-bold text-slate-900 text-right">{formatCurrency(invoice.cgstTotal || 0)}</span>
+                      </div>
+                      <div className="grid grid-cols-2 text-xs pt-1">
+                        <span className="text-slate-500 font-medium">State GST (SGST):</span>
+                        <span className="font-bold text-slate-900 text-right">{formatCurrency(invoice.sgstTotal || 0)}</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 text-xs py-1.5">
+                  <span className="text-slate-500 font-medium">Tax ({invoice.taxPercentage || 0}%):</span>
+                  <span className="font-bold text-slate-900 text-right">{formatCurrency(invoice.tax || 0)}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 py-3 border-t border-slate-900 text-slate-900">
+                <span className="font-black uppercase tracking-wider text-xs">Grand Total:</span>
+                <span className="font-extrabold text-right text-lg">{formatCurrency(invoice.total)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer & Signature aligned to bottom */}
+        <div className="mt-8 border-t border-slate-300 pt-6 flex justify-between items-end text-xs">
+          <div className="text-slate-400 font-medium">
+            <p>Software Powered by Quin</p>
+          </div>
+          
+          <div className="w-64 text-center space-y-1">
+            {profile?.signatureUrl ? (
+              <div className="h-10 flex justify-center items-center">
+                <img src={profile.signatureUrl} alt="Signature stamp" className="h-full object-contain mix-blend-multiply" />
+              </div>
+            ) : (
+              <div className="h-10 border-b border-dashed border-slate-300"></div>
+            )}
+            <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Authorized Officer / Signatory</p>
+            <p className="font-bold text-slate-900">For {profile?.businessName}</p>
+          </div>
         </div>
       </div>
     );

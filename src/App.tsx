@@ -1,5 +1,5 @@
-import { useState, useEffect, Suspense, lazy } from 'react';
-import { LayoutDashboard, Package, Receipt, BarChart3, User, LogOut, Settings, Menu, X, History, Cloud, Bot, AlertTriangle, Bell, Check, Users, Maximize, Minimize, TrendingUp } from 'lucide-react';
+import React, { useState, useEffect, Suspense, lazy, Component, ErrorInfo, ReactNode } from 'react';
+import { LayoutDashboard, Package, Receipt, BarChart3, User, LogOut, Settings, Menu, X, History, Cloud, Bot, AlertTriangle, Bell, Check, Users, Maximize, Minimize, TrendingUp, FileText, Copy, RefreshCw } from 'lucide-react';
 
 // Lazy load components
 const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
@@ -24,7 +24,6 @@ import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { getUser, saveUser, findStaffByEmail } from './lib/firestore';
 import { cn } from './lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
-import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { subscribeToNotifications, markAsRead, markAllAsRead } from './services/NotificationService';
 import { type Notification } from './db';
 
@@ -35,22 +34,69 @@ interface ErrorBoundaryProps {
 interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
+  errorInfo: ErrorInfo | null;
+  copied: boolean;
 }
 
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  public state: ErrorBoundaryState = { hasError: false, error: null };
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  public state: ErrorBoundaryState = { hasError: false, error: null, errorInfo: null, copied: false };
 
   constructor(props: ErrorBoundaryProps) {
     super(props);
   }
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
     return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
+    (this as any).setState({ errorInfo });
   }
+
+  copyReport = () => {
+    const errorDetails = `
+=== QUIN BILLING SYSTEM CRASH REPORT ===
+Timestamp: ${new Date().toISOString()}
+Local Time: ${new Date().toString()}
+URL: ${window.location.href}
+User Agent: ${navigator.userAgent}
+Connection Mode: ${navigator.onLine ? 'Online' : 'Offline'}
+
+-- ERROR DETAILS --
+Name: ${this.state.error?.name || 'N/A'}
+Message: ${this.state.error?.message || 'N/A'}
+Stack Trace:
+${this.state.error?.stack || 'No stack trace captured.'}
+
+-- COMPONENT TREE DETAILS --
+Component Stack:
+${this.state.errorInfo?.componentStack || 'No component stack captured.'}
+========================================
+`.trim();
+
+    navigator.clipboard.writeText(errorDetails)
+      .then(() => {
+        (this as any).setState({ copied: true });
+        setTimeout(() => (this as any).setState({ copied: false }), 2000);
+      })
+      .catch((err) => {
+        console.error('Failed to copy crash report to clipboard:', err);
+      });
+  };
+
+  hardReset = () => {
+    if (window.confirm("A Hard Reset will clear all cached settings and local preferences to restore default startup state. Database records are stored securely and will not be deleted. Continue?")) {
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+        window.location.reload();
+      } catch (e) {
+        console.error("Hard reset failed:", e);
+        window.location.reload();
+      }
+    }
+  };
 
   render() {
     if (this.state.hasError) {
@@ -70,20 +116,95 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
       }
 
       return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-          <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
-            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-              <AlertTriangle className="w-8 h-8" />
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 md:p-8 font-sans">
+          <div className="bg-white rounded-3xl shadow-xl max-w-2xl w-full border border-slate-100 overflow-hidden">
+            {/* Visual Indicator Banner */}
+            <div className="bg-rose-50 border-b border-rose-100 p-6 flex items-center gap-4">
+              <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-6 h-6 animate-pulse" />
+              </div>
+              <div>
+                <h2 className="text-xl font-black text-rose-950 leading-tight">Crash Management & Diagnostics</h2>
+                <p className="text-xs text-rose-700 font-semibold mt-0.5">The application encountered an unexpected runtime state</p>
+              </div>
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Oops!</h2>
-            <p className="text-gray-600 mb-4">{errorMessage}</p>
-            {details && <p className="text-xs text-gray-400 mb-6 font-mono">{details}</p>}
-            <button
-              onClick={() => window.location.reload()}
-              className="w-full py-3 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-colors"
-            >
-              Refresh Application
-            </button>
+
+            <div className="p-6 md:p-8 space-y-6">
+              {/* Main Message block */}
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Error Details</span>
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <p className="text-sm font-bold text-slate-800 leading-relaxed">{errorMessage}</p>
+                  {details && <p className="text-xs text-slate-500 mt-2 font-mono">{details}</p>}
+                </div>
+              </div>
+
+              {/* Collapsible stack diagnostics area */}
+              <div className="space-y-2">
+                <details className="group border border-slate-100 rounded-2xl overflow-hidden [&_summary::-webkit-details-marker]:hidden bg-slate-50/50">
+                  <summary className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-50 transition-colors">
+                    <span className="text-xs font-bold text-slate-600 select-none flex items-center gap-2">
+                      <span className="p-1 bg-white rounded-md border border-slate-200 text-slate-400 text-[10px] font-mono group-open:hidden">+</span>
+                      <span className="p-1 bg-slate-200 rounded-md text-slate-600 text-[10px] font-mono hidden group-open:inline">-</span>
+                      Technical Stack Trace (For Diagnostics)
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase group-open:hidden">View Stack</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase hidden group-open:inline">Hide Stack</span>
+                  </summary>
+                  
+                  <div className="p-4 border-t border-slate-100 bg-slate-900 text-slate-300 font-mono text-[10px] leading-relaxed max-h-60 overflow-y-auto space-y-4">
+                    {this.state.error?.stack && (
+                      <div className="space-y-1">
+                        <div className="text-rose-400 font-bold border-b border-rose-900/40 pb-1">Error Call Stack:</div>
+                        <pre className="whitespace-pre-wrap">{this.state.error.stack}</pre>
+                      </div>
+                    )}
+                    {this.state.errorInfo?.componentStack && (
+                      <div className="space-y-1">
+                        <div className="text-indigo-400 font-bold border-b border-indigo-900/40 pb-1 pt-2">React Component Tree:</div>
+                        <pre className="whitespace-pre-wrap">{this.state.errorInfo.componentStack}</pre>
+                      </div>
+                    )}
+                  </div>
+                </details>
+              </div>
+
+              {/* Action Buttons Panel */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                {/* Safe reload */}
+                <button
+                  onClick={() => window.location.reload()}
+                  className="py-3 px-4 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/10 text-sm"
+                >
+                  <RefreshCw className="w-4 h-4 animate-spin-slow" />
+                  Refresh Application
+                </button>
+
+                {/* Copy crash report button */}
+                <button
+                  onClick={this.copyReport}
+                  className="py-3 px-4 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-2xl border border-slate-200 transition-all active:scale-95 flex items-center justify-center gap-2 text-sm"
+                >
+                  <Copy className="w-4 h-4" />
+                  {this.state.copied ? 'Report Copied!' : 'Copy Diagnostics Info'}
+                </button>
+              </div>
+
+              {/* Troubleshoot Footer Help */}
+              <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-50/50 -mx-6 -mb-6 md:-mx-8 md:-mb-8 p-6">
+                <div className="space-y-0.5">
+                  <h4 className="text-xs font-bold text-slate-700">App won't recover after refreshing?</h4>
+                  <p className="text-[11px] text-slate-500 leading-normal">You can perform a clean startup reset without logging out or losing data.</p>
+                </div>
+                <button
+                  onClick={this.hardReset}
+                  className="px-4 py-2 bg-slate-200/80 text-slate-700 hover:bg-rose-50 hover:text-rose-700 font-bold rounded-xl text-xs transition-colors shrink-0"
+                >
+                  Hard Reset App
+                </button>
+              </div>
+
+            </div>
           </div>
         </div>
       );
@@ -93,7 +214,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 }
 
-type Tab = 'dashboard' | 'inventory' | 'transactions' | 'customers' | 'reports' | 'profile' | 'settings' | 'sales' | 'b2b';
+type Tab = 'dashboard' | 'inventory' | 'transactions' | 'customers' | 'reports' | 'profile' | 'settings' | 'sales' | 'quotations' | 'b2b';
 
 export default function App() {
   return (
@@ -264,7 +385,11 @@ function AppContent() {
           }
           
           setRole(userProfile.role);
-          setOwnerId(userProfile.ownerId || firebaseUser.uid);
+          const currentOwnerId = userProfile.ownerId || firebaseUser.uid;
+          setOwnerId(currentOwnerId);
+
+          // Auto-reset disabled. Data clear operations must be explicitly triggered from the Profile's Danger Zone.
+
           await testConnectionEffect();
           
           // Subscribe to notifications
@@ -433,6 +558,8 @@ function AppContent() {
 
   const navigation = [
     { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
+    { id: 'sales', name: 'Create Sale', icon: Receipt, roles: ['admin', 'sales_manager'] },
+    { id: 'quotations', name: 'Create Quotation', icon: FileText, roles: ['admin', 'sales_manager'] },
     { id: 'inventory', name: 'Inventory', icon: Package, roles: ['admin', 'inventory_manager'] },
     { id: 'transactions', name: 'Transactions', icon: History, roles: ['admin', 'sales_manager', 'ca'] },
     { id: 'customers', name: 'Customers', icon: Users, roles: ['admin', 'sales_manager'] },
@@ -504,12 +631,12 @@ function AppContent() {
   const handleEditInvoice = (id: string, isQuotation?: boolean) => {
     setEditingInvoiceId(id);
     setIsCreatingQuotation(!!isQuotation);
-    setActiveTab('sales');
+    setActiveTab(isQuotation ? 'quotations' : 'sales');
   };
 
   const handleNewSale = (direct: boolean | 'quotation' = false) => {
     setEditingInvoiceId(undefined);
-    setActiveTab('sales');
+    setActiveTab(direct === 'quotation' ? 'quotations' : 'sales');
     setIsCreatingQuotation(direct === 'quotation');
     if (direct === true) {
       localStorage.setItem('quin_direct_sell', 'true');
@@ -519,18 +646,97 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 no-print">
-      <header className="sticky top-0 bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 md:px-8 py-3 md:py-4 flex justify-between items-center z-40">
-        <div className="flex items-center gap-2 md:gap-3">
-          <div className="w-8 h-8 md:w-10 md:h-10 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-lg md:rounded-xl flex items-center justify-center shadow-lg shadow-blue-200/50 relative overflow-hidden">
-            <div className="absolute -bottom-2 -left-2 w-6 h-6 bg-emerald-500/30 blur-xl" />
-            <TrendingUp size={24} className="text-white relative z-10" />
+    <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 text-slate-900 no-print">
+      {/* Dynamic responsive Sidebar for Tablet and Desktop sizes */}
+      {appMode === 'quin' && !isInactive && (
+        <aside className="hidden md:flex flex-col w-64 bg-white border-r border-slate-200 h-screen sticky top-0 z-30 shrink-0 select-none no-print">
+          {/* Brand/Logo details */}
+          <div className="p-6 border-b border-slate-200/80 flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200/50 relative overflow-hidden shrink-0">
+              <div className="absolute -bottom-2 -left-2 w-6 h-6 bg-emerald-500/30 blur-xl" />
+              <TrendingUp size={20} className="text-white relative z-10" />
+            </div>
+            <div>
+              <h1 className="font-black text-slate-900 text-lg tracking-tight leading-none mb-0.5">Quin</h1>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">Inventory & Billing</p>
+            </div>
           </div>
-          <div className="hidden sm:block">
-            <h1 className="font-bold text-base md:text-lg tracking-tight">Quin</h1>
-            <p className="text-[8px] md:text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">Inventory & Billing</p>
+
+          {/* Navigation link listings */}
+          <div className="flex-1 py-6 px-4 space-y-1.5 overflow-y-auto">
+            {navigation.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id as Tab);
+                  if (item.id !== 'transactions') setEditingInvoiceId(undefined);
+                  if (item.id !== 'reports') setSelectedIntelligenceProductId(null);
+                  if (item.id === 'quotations') {
+                    setIsCreatingQuotation(true);
+                  } else if (item.id === 'sales') {
+                    setIsCreatingQuotation(false);
+                  }
+                }}
+                className={cn(
+                  "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm",
+                  activeTab === item.id
+                    ? "bg-slate-900 text-white shadow-lg shadow-slate-900/15"
+                    : "text-slate-500 hover:text-slate-900 hover:bg-slate-50"
+                )}
+              >
+                <item.icon size={18} className={cn(activeTab === item.id ? "text-white" : "text-slate-400")} />
+                <span>{item.name === 'Me (Profile)' ? 'Profile' : item.name}</span>
+              </button>
+            ))}
           </div>
-        </div>
+
+          {/* Connected User Profile Info */}
+          <div className="p-4 border-t border-slate-200/80 bg-slate-50/50">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-slate-200 border border-slate-300 flex items-center justify-center text-slate-700 text-sm font-bold shrink-0">
+                {(user?.displayName || user?.email || 'U').charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-slate-900 truncate">{user?.displayName || 'User'}</p>
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider truncate">{role || 'Staff'}</p>
+              </div>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="w-full py-2.5 px-3 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-bold transition-colors flex items-center gap-2 justify-center"
+            >
+              <LogOut size={14} />
+              Logout
+            </button>
+          </div>
+        </aside>
+      )}
+
+      {/* Main viewport Container */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="sticky top-0 bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 md:px-8 py-3 md:py-4 flex justify-between items-center z-40">
+          <div className="flex items-center gap-2 md:gap-3">
+            {/* Logo shown ONLY on mobile viewports */}
+            <div className="flex md:hidden items-center gap-2">
+              <div className="w-8 h-8 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-200/50 relative overflow-hidden">
+                <div className="absolute -bottom-2 -left-2 w-6 h-6 bg-emerald-500/30 blur-xl" />
+                <TrendingUp size={20} className="text-white relative z-10" />
+              </div>
+              <div>
+                <h1 className="font-extrabold text-base tracking-tight leading-none mb-0.5">Quin</h1>
+                <p className="text-[7px] text-slate-400 font-bold uppercase tracking-widest leading-none">Inventory & Billing</p>
+              </div>
+            </div>
+
+            {/* Current Active Tab dynamic page title shown in top bar on tablet/desktop */}
+            <div className="hidden md:block">
+              <h2 className="font-extrabold text-slate-800 text-lg tracking-tight capitalize leading-none">
+                {appMode === 'quin' 
+                  ? (activeTab === 'profile' ? 'My Profile' : activeTab === 'sales' ? 'Create Sale' : activeTab === 'quotations' ? 'Create Quotation' : activeTab) 
+                  : 'B2B Wholesale Network'}
+              </h2>
+            </div>
+          </div>
 
         {isOffline && (
           <div className="flex-1 mx-4 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 flex items-center gap-2 text-amber-700 text-xs font-medium animate-pulse">
@@ -677,7 +883,7 @@ function AppContent() {
         </div>
       </header>
 
-      <main className="flex-1 overflow-auto pb-20 md:pb-24">
+      <main className="flex-1 overflow-auto pb-20 md:pb-8">
         <div className="max-w-7xl mx-auto p-4 md:p-8">
           <Suspense fallback={
             <div className="flex items-center justify-center h-64">
@@ -737,7 +943,23 @@ function AppContent() {
                     role={role}
                     editId={editingInvoiceId} 
                     initialItems={initialBillingItems}
-                    isQuotation={isCreatingQuotation}
+                    isQuotation={false}
+                    onComplete={() => {
+                      setEditingInvoiceId(undefined);
+                      setInitialBillingItems(undefined);
+                      setIsCreatingQuotation(false);
+                      setActiveTab('transactions');
+                    }} 
+                  />
+                )}
+                {activeTab === 'quotations' && (
+                  <Billing 
+                    user={user}
+                    ownerId={ownerId || user.uid}
+                    role={role}
+                    editId={editingInvoiceId} 
+                    initialItems={initialBillingItems}
+                    isQuotation={true}
                     onComplete={() => {
                       setEditingInvoiceId(undefined);
                       setInitialBillingItems(undefined);
@@ -833,7 +1055,7 @@ function AppContent() {
       )}
 
       {appMode === 'quin' && !isInactive && (
-        <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 py-2 flex justify-around items-center no-print z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <nav className="flex md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 py-2 justify-around items-center no-print z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
           {navigation.map((item) => (
             <button
               key={item.id}
@@ -841,6 +1063,11 @@ function AppContent() {
                 setActiveTab(item.id as Tab);
                 if (item.id !== 'transactions') setEditingInvoiceId(undefined);
                 if (item.id !== 'reports') setSelectedIntelligenceProductId(null);
+                if (item.id === 'quotations') {
+                  setIsCreatingQuotation(true);
+                } else if (item.id === 'sales') {
+                  setIsCreatingQuotation(false);
+                }
               }}
               className={cn(
                 "flex flex-col items-center gap-1 p-2 rounded-xl transition-all min-w-[64px]",
@@ -865,6 +1092,7 @@ function AppContent() {
           ))}
         </nav>
       )}
+      </div>
     </div>
   );
 }

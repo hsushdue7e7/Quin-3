@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { TrendingDown, X } from 'lucide-react';
-import { saveExpense, logActivity } from '../lib/firestore';
+import { saveExpense, logActivity, getMyStaffName } from '../lib/firestore';
 import { type Expense } from '../db';
 import { User as FirebaseUser } from 'firebase/auth';
 
@@ -26,7 +26,7 @@ export function AddExpenseModal({ isOpen, onClose, ownerId, user, onExpenseAdded
 
     setIsLoading(true);
     try {
-      const staffName = user.displayName || user.email?.split('@')[0] || 'Staff';
+      const staffName = await getMyStaffName(ownerId, user);
       await saveExpense({
         userId: ownerId,
         amount: Number(amount),
